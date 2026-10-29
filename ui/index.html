@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>视频助手</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="aurora" aria-hidden="true">
+    <span class="orb orb-a"></span>
+    <span class="orb orb-b"></span>
+    <span class="orb orb-c"></span>
+    <span class="orb orb-d"></span>
+  </div>
+
+  <main class="window">
+    <div class="glow" id="glow" aria-hidden="true"></div>
+
+    <aside class="rail">
+      <nav class="tabs" aria-label="平台">
+        <button class="tab is-active" type="button" aria-current="page"><span class="label">哔哩哔哩</span></button>
+        <button class="tab is-locked" type="button" aria-disabled="true">
+          <span class="label">抖音</span>
+          <span class="veil" aria-hidden="true"></span>
+        </button>
+        <button class="tab is-locked" type="button" aria-disabled="true">
+          <span class="label">红果</span>
+          <span class="veil" aria-hidden="true"></span>
+        </button>
+      </nav>
+    </aside>
+
+    <section class="panel" aria-label="哔哩哔哩控制">
+      <div class="content">
+        <ul class="checks" id="checks" aria-live="polite"></ul>
+      </div>
+      <div class="action-row">
+        <button class="start" id="start" type="button">启动控制器</button>
+        <button class="retry" id="retry" type="button" hidden aria-label="重试">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.3-5.6"></path>
+            <path d="M20 4.8V9h-4.2"></path>
+          </svg>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
