@@ -33,10 +33,11 @@
 
     <section class="panel" aria-label="哔哩哔哩控制">
       <div class="topbar">
-        <div class="meters">
-          <canvas class="wave" id="wave" width="224" height="56" hidden aria-hidden="true"></canvas>
-          <span class="elapsed" id="elapsed">00:00:00</span>
+        <div class="wave-slot">
+          <canvas class="wave" id="wave" width="448" height="56" hidden aria-hidden="true"></canvas>
+          <p class="caption" id="caption" hidden></p>
         </div>
+        <span class="elapsed" id="elapsed">00:00:00</span>
         <button class="retry" id="retry" type="button" hidden aria-label="重试">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 12a8 8 0 1 1-2.3-5.6"></path>

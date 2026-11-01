@@ -260,20 +260,40 @@ button {
     0 16px 28px rgba(162, 190, 220, 0.12);
 }
 
-.meters {
+.wave-slot {
   display: flex;
+  flex: 1;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 4px;
   min-width: 0;
 }
 
 .wave {
-  width: 112px;
+  width: 224px;
   height: 28px;
   display: block;
 }
 
 .wave[hidden] {
+  display: none;
+}
+
+.caption {
+  max-width: 280px;
+  min-height: 16px;
+  margin: 0;
+  color: var(--ink-600);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.caption[hidden] {
   display: none;
 }
 

@@ -15,6 +15,7 @@ const confirmEl = document.getElementById("confirm");
 const confirmOk = document.getElementById("confirm-ok");
 const confirmCancel = document.getElementById("confirm-cancel");
 const waveEl = document.getElementById("wave");
+const captionEl = document.getElementById("caption");
 const elapsedEl = document.getElementById("elapsed");
 const waveLevels = Array(40).fill(0);
 let wavePhase = 0;
@@ -52,6 +53,8 @@ function paint() {
   retryBtn.hidden = mode !== "failed";
   retryBtn.disabled = busy;
   waveEl.hidden = mode !== "started";
+  captionEl.hidden = mode !== "started";
+  if (mode !== "started") captionEl.textContent = "";
 
   const keep = new Set(shown);
   for (const child of [...checksEl.children]) {
@@ -186,6 +189,7 @@ async function pollLevel() {
     }
     waveLevels.shift();
     waveLevels.push(Math.max(0, Math.min(1, Number(state.level) || 0)));
+    if (typeof state.caption === "string") captionEl.textContent = state.caption;
   } catch (error) {
     return;
   } finally {

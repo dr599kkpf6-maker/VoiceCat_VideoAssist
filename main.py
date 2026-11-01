@@ -20,15 +20,18 @@ class Session:
     def __init__(self):
         self._lock = threading.Lock()
         self.listener = None
+        self.caption = ""
 
     def start_listening(self):
         with self._lock:
             if self.listener is not None and self.listener.alive:
                 return {"ok": True}
+            self.caption = ""
             listener = voice_rec.Listener(self._on_text)
             if not listener.start():
                 return {"ok": False}
             self.listener = listener
+            self.caption = ""
             startup_checks.log("控制器已启动，开始监听")
             return {"ok": True}
 
@@ -36,6 +39,7 @@ class Session:
         with self._lock:
             listener = self.listener
             self.listener = None
+            self.caption = ""
         if listener is not None:
             listener.stop()
             startup_checks.log("控制器已断开，停止监听")
@@ -44,12 +48,15 @@ class Session:
     def sound_level(self):
         listener = self.listener
         if listener is None or not listener.alive:
-            return {"running": False, "level": 0}
-        return {"running": True, "level": round(float(listener.level), 4)}
+            return {"running": False, "level": 0, "caption": ""}
+        return {"running": True, "level": round(float(listener.level), 4), "caption": self.caption}
 
     def _on_text(self, text: str) -> None:
-        commands = command_parser.parse(text)
-        bilibili_controller.execute(text, commands)
+        heard = (text or "").strip()
+        if "猫师傅" in heard.replace(" ", ""):
+            self.caption = heard
+        commands = command_parser.parse(heard)
+        bilibili_controller.execute(heard, commands)
 
 
 class Api:

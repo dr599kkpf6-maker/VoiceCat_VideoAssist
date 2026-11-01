@@ -50,20 +50,40 @@ COLLECT_JS = r"""
     if (style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) return null;
     return box;
   };
-  const cards = [];
-  const seen = new Set();
+  const tidy = (raw) => String(raw || "").replace(/\s+/g, " ").trim();
+  const stripTail = (text) => text.replace(/(?:\s+\d+(?:\.\d+)?[万亿]?){1,}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/g, "").trim();
+  const usable = (raw) => {
+    const text = stripTail(tidy(raw));
+    if (text.length < 2 || text.length > 80) return "";
+    const left = text.replace(/[0-9.\s万亿播放弹幕时长点赞收藏投币分享:：]+/g, "");
+    return left.length < 2 ? "" : text;
+  };
+  const titleOf = (link) => {
+    const root = link.closest("article, li, [class*='card']") || link.parentElement || link;
+    const nodes = [link, ...root.querySelectorAll("[title], h3, h2, p")];
+    let best = "";
+    for (const node of nodes) {
+      const attr = usable(node.getAttribute && node.getAttribute("title"));
+      const text = usable(node.innerText);
+      const choice = attr.length >= text.length ? attr : text;
+      if (choice.length > best.length) best = choice;
+    }
+    return best;
+  };
+  const byId = new Map();
   for (const link of document.querySelectorAll("a")) {
     const id = idOf(link.href);
     if (!id) continue;
     const box = boxOf(link);
     if (!box) continue;
-    const title = (link.getAttribute("title") || link.innerText || "").replace(/\s+/g, " ").trim();
-    if (title.length < 2) continue;
-    const key = id + "|" + title;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    cards.push({title, id, x: box.x, y: box.y, right: box.x >= innerWidth * 0.62});
+    const title = titleOf(link);
+    if (!title) continue;
+    const prev = byId.get(id);
+    if (!prev || title.length > prev.title.length) {
+      byId.set(id, {title, id, x: box.x, y: box.y, right: box.x >= innerWidth * 0.62});
+    }
   }
+  const cards = [...byId.values()];
   const names = ["直播", "推荐", "热门", "追番", "影视"];
   const tabs = [];
   for (const node of document.querySelectorAll("a,button,div,span,li")) {
