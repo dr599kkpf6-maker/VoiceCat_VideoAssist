@@ -148,6 +148,20 @@ button {
   z-index: 1;
 }
 
+.watermark {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 2;
+  margin: 0;
+  color: var(--ink-600);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  user-select: none;
+}
+
 .rail {
   display: flex;
   min-height: 0;

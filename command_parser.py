@@ -15,8 +15,9 @@ _SPACE = re.compile(r"\s+")
 _TAG = re.compile(r"<\|.*?\|>")
 _EDGE = re.compile(r"^[，,。！？、!?.；;：:\s]+|[，,。！？、!?.；;：:\s]+$")
 _COMPACT = re.compile(r"[\s，。！？、,.!?:：;；\"'“”‘’（）()【】\[\]《》<>\-—_]+")
+_TAB_TAIL = "(?:栏目|南目|南幕|蓝目|兰目|男目|拦目|栏木|南木|栏幕|频道|页面|页|区|栏)?"
 _TAB = re.compile(
-    rf"^(?:请|帮我|给我|我要|我想)?(?:切换到|切换|切到|换到|打开|看)到*({'|'.join(TABS)})(?:栏目|频道|页面|页|区|栏)?(?:一下|吧)?$"
+    rf"^(?:请|帮我|给我|我要|我想)?(?:切换到|切换|切到|换到|打开|看)到*({'|'.join(TABS)}){_TAB_TAIL}(?:一下|吧)?$"
 )
 _NEXT = re.compile(r"(下一个|下一条|下一集|我要看下一个|看下一个)")
 _PREV = re.compile(r"(上一个|上一条|上一集|我要看上一个|看上一个)")
@@ -24,6 +25,10 @@ _HOME = re.compile(
     r"^(?:请|帮我|给我)?(?:返回|回到|回)+(?:一下|到|去)?(?:主界面|主页面|主页|首页)(?:一下|吧|去)?$"
 )
 _BACK = re.compile(r"^(?:请)?(?:返回上一页|回到上一页|返回上一个页面|返回|回去)$")
+_CLOSE = re.compile(
+    r"^(?:请|帮我|给我)?(?:把)?(?:现在|在)?(?:关闭|关掉|关上|关了)+(?:一下|掉|了|吧)?(?:当前|这个|正在看的|正在播放的)?视频(?:窗口)?(?:一下|吧)?$"
+    r"|^(?:请|帮我|给我)?(?:把)?(?:当前|这个|正在看的|正在播放的)视频(?:窗口)?(?:关闭|关掉|关上|关了)(?:一下|吧|了)?$"
+)
 _PLAY = re.compile(r"^(?:请|帮我|给我)?(?:把视频)?(?:现在|在)?(?:暂停|播放|继续)+(?:一下|吧|视频|了|啊)?$")
 _TITLE_PREFIX = re.compile(r"^(?:我要看|我想看|想看|给我放|给我看|请播放|请打开|播放|打开|看)")
 _TITLE_SUFFIX = re.compile(r"(?:这个视频|那条视频|视频)$")
@@ -66,6 +71,8 @@ def parse_one(segment: str) -> dict:
         return {"intent": "unknown", "text": ""}
     if _HOME.fullmatch(segment):
         return {"intent": "home", "text": segment}
+    if _CLOSE.fullmatch(segment):
+        return {"intent": "close_video", "text": segment}
     if _BACK.fullmatch(segment):
         return {"intent": "back", "text": segment}
     tab = _TAB.fullmatch(segment)

@@ -164,6 +164,9 @@ def _execute_one(heard: str, command: dict) -> None:
     if intent == "home":
         _go_home(heard)
         return
+    if intent == "close_video":
+        _close_video(heard)
+        return
     startup_checks.log(f"听到「{heard}」，没有对上指令")
 
 
@@ -389,6 +392,22 @@ def _go_back(heard: str) -> None:
     startup_checks.log(f"听到「{heard}」，返回，没有上一个页面")
 
 
+def _close_video(heard: str) -> None:
+    pages = _pages()
+    if pages is None:
+        startup_checks.log(f"听到「{heard}」，关闭当前视频，调试端口不可连接")
+        return
+    player = _player_page(pages)
+    if player is None:
+        startup_checks.log(f"听到「{heard}」，关闭当前视频，没有正在播放的视频")
+        return
+    if _eval(player["ws"], _CLICK_PLAYER_CLOSE):
+        _focus_client(prefer_home=True)
+        startup_checks.log(f"听到「{heard}」，关闭当前视频，已关闭")
+        return
+    startup_checks.log(f"听到「{heard}」，关闭当前视频，没有点到关闭按钮")
+
+
 def _go_home(heard: str) -> None:
     pages = _pages()
     if pages is None:
@@ -536,6 +555,19 @@ _CLICK_TAB = r"""
   const target = nodes.find((node) => (node.innerText || "").replace(/\s+/g, "").trim() === name);
   if (!target) return false;
   target.click();
+  return true;
+})()
+"""
+
+_CLICK_PLAYER_CLOSE = r"""
+(() => {
+  const buttons = [...document.querySelectorAll(".right-window-btns > .app_player--header-icon")];
+  const close = buttons.find((node) => {
+    const path = node.querySelector("path");
+    return path && String(path.getAttribute("d") || "").includes("M9.22");
+  });
+  if (!close) return false;
+  close.click();
   return true;
 })()
 """
