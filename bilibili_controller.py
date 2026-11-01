@@ -185,11 +185,20 @@ def _send_named(heard: str, intent: str, action: str) -> None:
     startup_checks.log(f"听到「{heard}」，意图 {intent}，已发送按键")
 
 
-def _client_hwnd():
+def _window_title(hwnd) -> str:
+    length = _user32.GetWindowTextLengthW(hwnd)
+    if length <= 0:
+        return ""
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    _user32.GetWindowTextW(hwnd, buffer, length + 1)
+    return buffer.value
+
+
+def _client_hwnd(prefer_home: bool = False):
     pids = set(startup_checks._pids_named(startup_checks._process_name()))
     if not pids:
         return None
-    chosen = {"hwnd": None, "area": -1, "iconic": None}
+    chosen = {"hwnd": None, "area": -1, "iconic": None, "home": False}
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     def visit(hwnd, _lparam):
@@ -204,8 +213,11 @@ def _client_hwnd():
         rect = wintypes.RECT()
         _user32.GetWindowRect(hwnd, ctypes.byref(rect))
         area = max(0, rect.right - rect.left) * max(0, rect.bottom - rect.top)
+        home_title = "哔哩哔哩" in _window_title(hwnd)
         better = chosen["hwnd"] is None
-        if iconic and chosen["iconic"] is False:
+        if prefer_home and home_title != chosen["home"]:
+            better = home_title
+        elif iconic and chosen["iconic"] is False:
             better = False
         elif (not iconic) and chosen["iconic"] is True:
             better = True
@@ -215,14 +227,15 @@ def _client_hwnd():
             chosen["hwnd"] = hwnd
             chosen["area"] = area
             chosen["iconic"] = iconic
+            chosen["home"] = home_title
         return True
 
     _user32.EnumWindows(visit, 0)
     return chosen["hwnd"]
 
 
-def _focus_client() -> bool:
-    hwnd = _client_hwnd()
+def _focus_client(prefer_home: bool = False) -> bool:
+    hwnd = _client_hwnd(prefer_home)
     if not hwnd:
         return False
     if _user32.IsIconic(hwnd):
@@ -262,21 +275,24 @@ def _switch_tab(heard: str, tab: str) -> None:
     if pages is None:
         startup_checks.log(f"听到「{heard}」，切到{tab}，调试端口不可连接")
         return
-    if not any(tab in page["tabs"] for page in pages):
-        home = _first_bilibili(pages)
-        if home is None or not _eval(home["ws"], _CLICK_HOME):
-            startup_checks.log(f"听到「{heard}」，切到{tab}，回不到主页面")
-            return
-        deadline = time.time() + 3
-        while time.time() < deadline:
-            time.sleep(0.35)
-            pages = _pages() or []
-            if any(tab in page["tabs"] for page in pages):
-                break
-    for page in pages or []:
-        if tab in page["tabs"] and _eval(page["ws"], _CLICK_TEXT % json.dumps(tab)):
+    player = _player_page(pages)
+    if player is not None:
+        _eval(player["ws"], _CLICK_PLAYER_HOME)
+        time.sleep(0.45)
+        pages = _pages() or pages
+    home = _home_page(pages) or _first_bilibili(pages)
+    if home is None:
+        startup_checks.log(f"听到「{heard}」，切到{tab}，回不到主页面")
+        return
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        if _eval(home["ws"], _CLICK_TAB % json.dumps(tab)):
+            _focus_client(prefer_home=True)
             startup_checks.log(f"听到「{heard}」，切到{tab}，已打开")
             return
+        time.sleep(0.35)
+        pages = _pages() or []
+        home = _home_page(pages) or home
     startup_checks.log(f"听到「{heard}」，切到{tab}，主页面标签栏上没有这个标签")
 
 
@@ -378,22 +394,44 @@ def _go_home(heard: str) -> None:
     if pages is None:
         startup_checks.log(f"听到「{heard}」，返回主界面，调试端口不可连接")
         return
-    if any(_is_home(page.get("href") or "") for page in pages):
+    player = _player_page(pages)
+    if player is not None and _eval(player["ws"], _CLICK_PLAYER_HOME):
+        _focus_client(prefer_home=True)
+        startup_checks.log(f"听到「{heard}」，返回主界面，已返回主页面")
+        return
+    if _home_page(pages) is not None and player is None:
+        _focus_client(prefer_home=True)
         startup_checks.log(f"听到「{heard}」，返回主界面，已在主页面")
         return
-    home = _first_bilibili(pages)
+    home = _home_page(pages) or _first_bilibili(pages)
     if home is not None and _eval(home["ws"], _CLICK_HOME):
+        _focus_client(prefer_home=True)
         startup_checks.log(f"听到「{heard}」，返回主界面，已返回主页面")
         return
     startup_checks.log(f"听到「{heard}」，返回主界面，回不到主页面")
 
 
+def _is_player(url: str) -> bool:
+    text = str(url or "")
+    return "player.html" in text or "/video/" in text
+
+
 def _is_home(url: str) -> bool:
+    if _is_player(url):
+        return False
     parsed = urllib.parse.urlparse(url)
     if "bilibili" not in parsed.netloc:
         return False
     path = parsed.path.rstrip("/")
-    return path in ("", "/index", "/index.html") and "/video/" not in url
+    return path in ("", "/index", "/index.html")
+
+
+def _player_page(pages: list[dict]) -> dict | None:
+    return next((page for page in pages if _is_player(page.get("href") or "")), None)
+
+
+def _home_page(pages: list[dict]) -> dict | None:
+    return next((page for page in pages if _is_home(page.get("href") or "")), None)
 
 
 def _first_bilibili(pages: list[dict]) -> dict | None:
@@ -491,15 +529,53 @@ _CLICK_TEXT = r"""
 })()
 """
 
+_CLICK_TAB = r"""
+(() => {
+  const name = %s;
+  const nodes = [...document.querySelectorAll(".vui_tabs--nav-item, .vui_tabs--nav-text")];
+  const target = nodes.find((node) => (node.innerText || "").replace(/\s+/g, "").trim() === name);
+  if (!target) return false;
+  target.click();
+  return true;
+})()
+"""
+
+_CLICK_PLAYER_HOME = r"""
+(() => {
+  const marked = document.querySelector(".app_player--header-home");
+  if (marked) {
+    marked.click();
+    return true;
+  }
+  const node = [...document.querySelectorAll("div,span,button,a")].find((el) => {
+    const text = (el.innerText || "").replace(/\s+/g, "").trim();
+    const box = el.getBoundingClientRect();
+    return text === "回到主界面" && box.height > 8 && box.height < 80 && box.width < 260;
+  });
+  if (!node) return false;
+  node.click();
+  return true;
+})()
+"""
+
 _CLICK_HOME = r"""
 (() => {
-  const home = document.querySelector('a[href="https://www.bilibili.com/"], a[href="https://www.bilibili.com"], a[href="/"]');
+  const links = [...document.querySelectorAll("a")];
+  const home = links.find((link) => {
+    const href = link.getAttribute("href") || "";
+    try {
+      const url = new URL(href, location.href);
+      return url.hostname.includes("bilibili") && (url.pathname === "/" || url.pathname === "");
+    } catch (error) {
+      return false;
+    }
+  });
   if (home) {
     home.click();
     return true;
   }
   if (String(location.href || "").includes("bilibili")) {
-    location.href = "https://www.bilibili.com/";
+    location.href = "https://bilipc.bilibili.com/index.html#/page/home/recommends";
     return true;
   }
   return false;

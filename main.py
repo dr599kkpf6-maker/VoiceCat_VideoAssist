@@ -53,7 +53,7 @@ class Session:
 
     def _on_text(self, text: str) -> None:
         heard = (text or "").strip()
-        if "猫师傅" in heard.replace(" ", ""):
+        if command_parser.has_wake(heard):
             self.caption = heard
         commands = command_parser.parse(heard)
         bilibili_controller.execute(heard, commands)

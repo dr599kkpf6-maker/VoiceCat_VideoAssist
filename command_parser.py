@@ -8,42 +8,67 @@ from pypinyin import Style, lazy_pinyin
 from rapidfuzz import fuzz
 
 WAKE = "猫师傅"
+WAKE_ALIASES = ("猫师傅", "高师傅", "毛师傅", "喵师傅", "猫师父", "猫师付", "小猫", "猫猫")
 TABS = ("直播", "推荐", "热门", "追番", "影视")
 
 _SPACE = re.compile(r"\s+")
 _TAG = re.compile(r"<\|.*?\|>")
 _EDGE = re.compile(r"^[，,。！？、!?.；;：:\s]+|[，,。！？、!?.；;：:\s]+$")
 _COMPACT = re.compile(r"[\s，。！？、,.!?:：;；\"'“”‘’（）()【】\[\]《》<>\-—_]+")
-_TAB = re.compile(rf"(?:切换到|切到|换到|打开|看)到*({'|'.join(TABS)})$")
+_TAB = re.compile(
+    rf"^(?:请|帮我|给我|我要|我想)?(?:切换到|切换|切到|换到|打开|看)到*({'|'.join(TABS)})(?:栏目|频道|页面|页|区|栏)?(?:一下|吧)?$"
+)
 _NEXT = re.compile(r"(下一个|下一条|下一集|我要看下一个|看下一个)")
 _PREV = re.compile(r"(上一个|上一条|上一集|我要看上一个|看上一个)")
-_HOME = re.compile(r"(返回主界面|回到主界面|回主界面|返回主页|回到主页|回主页|返回首页|回到首页|回首页)")
+_HOME = re.compile(
+    r"^(?:请|帮我|给我)?(?:返回|回到|回)+(?:一下|到|去)?(?:主界面|主页面|主页|首页)(?:一下|吧|去)?$"
+)
 _BACK = re.compile(r"^(?:请)?(?:返回上一页|回到上一页|返回上一个页面|返回|回去)$")
 _PLAY = re.compile(r"^(?:请|帮我|给我)?(?:把视频)?(?:现在|在)?(?:暂停|播放|继续)+(?:一下|吧|视频|了|啊)?$")
 _TITLE_PREFIX = re.compile(r"^(?:我要看|我想看|想看|给我放|给我看|请播放|请打开|播放|打开|看)")
 _TITLE_SUFFIX = re.compile(r"(?:这个视频|那条视频|视频)$")
 
 
+def has_wake(text: str) -> bool:
+    cleaned = _SPACE.sub("", _TAG.sub("", text or ""))
+    return any(alias in cleaned for alias in WAKE_ALIASES)
+
+
+def _normalize_wake(text: str) -> str:
+    aliases = sorted(WAKE_ALIASES, key=len, reverse=True)
+    pieces = []
+    index = 0
+    while index < len(text):
+        alias = next((item for item in aliases if text.startswith(item, index)), "")
+        if alias:
+            pieces.append(WAKE)
+            index += len(alias)
+        else:
+            pieces.append(text[index])
+            index += 1
+    return "".join(pieces)
+
+
 def parse(text: str) -> list[dict]:
     cleaned = _SPACE.sub("", _TAG.sub("", text or ""))
-    if WAKE not in cleaned:
+    if not has_wake(cleaned):
         return []
     commands = []
-    for part in cleaned.split(WAKE)[1:]:
+    for part in _normalize_wake(cleaned).split(WAKE)[1:]:
         segment = _EDGE.sub("", part)
         commands.append(parse_one(segment))
     return commands
 
 
 def parse_one(segment: str) -> dict:
-    segment = _EDGE.sub("", segment or "")
+    segment = _COMPACT.sub("", _EDGE.sub("", segment or ""))
     if not segment:
         return {"intent": "unknown", "text": ""}
-    if _HOME.search(segment):
+    if _HOME.fullmatch(segment):
         return {"intent": "home", "text": segment}
     if _BACK.fullmatch(segment):
         return {"intent": "back", "text": segment}
-    tab = _TAB.search(segment)
+    tab = _TAB.fullmatch(segment)
     if tab and "右边" not in segment:
         return {"intent": "switch_tab", "tab": tab.group(1), "text": segment}
     if _NEXT.search(segment) and "右边" not in segment:

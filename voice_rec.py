@@ -12,7 +12,14 @@ import sounddevice as sd
 
 import startup_checks
 
-WAKE_TOKENS = "m āo sh ī f ù @猫师傅"
+WAKE_KEYWORDS = "\n".join((
+    "m āo sh ī f ù @猫师傅",
+    "g āo sh ī f ù @高师傅",
+    "m áo sh ī f ù @毛师傅",
+    "m iāo sh ī f ù @喵师傅",
+    "x iǎo m āo @小猫",
+    "m āo m āo @猫猫",
+))
 SAMPLE_RATE = 16000
 
 
@@ -74,7 +81,7 @@ class Listener:
         kws_dir = model_dir / startup_checks.KWS_DIR
         sense_dir = model_dir / startup_checks.SENSE_DIR
         keywords = startup_checks.APP_DIR / "wake_keywords.txt"
-        keywords.write_text(WAKE_TOKENS + "\n", encoding="utf-8")
+        keywords.write_text(WAKE_KEYWORDS + "\n", encoding="utf-8")
         self._kws = sherpa_onnx.KeywordSpotter(
             tokens=str(kws_dir / "tokens.txt"),
             encoder=str(kws_dir / "encoder-epoch-12-avg-2-chunk-16-left-64.onnx"),
@@ -82,8 +89,8 @@ class Listener:
             joiner=str(kws_dir / "joiner-epoch-12-avg-2-chunk-16-left-64.onnx"),
             keywords_file=str(keywords),
             num_threads=2,
-            keywords_score=1.5,
-            keywords_threshold=0.2,
+            keywords_score=2.2,
+            keywords_threshold=0.08,
             provider="cpu",
         )
         config = startup_checks.load_config()
