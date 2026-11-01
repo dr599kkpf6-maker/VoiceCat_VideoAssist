@@ -15,9 +15,9 @@ def main() -> None:
     webview.create_window(
         "视频助手",
         page.as_uri(),
-        width=880,
-        height=640,
-        min_size=(880, 640),
+        width=816,
+        height=492,
+        min_size=(816, 492),
         background_color="#F7F3F8",
     )
     webview.start()
