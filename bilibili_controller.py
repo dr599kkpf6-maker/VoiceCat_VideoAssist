@@ -58,17 +58,30 @@ COLLECT_JS = r"""
     const left = text.replace(/[0-9.\s万亿播放弹幕时长点赞收藏投币分享:：]+/g, "");
     return left.length < 2 ? "" : text;
   };
+  const tightRoot = (link) => {
+    let node = link;
+    while (node.parentElement && node.parentElement !== document.body) {
+      const parent = node.parentElement;
+      const ids = new Set([...parent.querySelectorAll("a")].map((item) => idOf(item.href)).filter(Boolean));
+      if (ids.size > 1) break;
+      node = parent;
+    }
+    return node;
+  };
   const titleOf = (link) => {
-    const root = link.closest("article, li, [class*='card']") || link.parentElement || link;
-    const nodes = [link, ...root.querySelectorAll("[title], h3, h2, p")];
+    const root = tightRoot(link);
+    const nodes = [...root.querySelectorAll("h3, h2, [class*='tit']")];
+    if (!nodes.includes(link)) nodes.unshift(link);
     let best = "";
     for (const node of nodes) {
       const attr = usable(node.getAttribute && node.getAttribute("title"));
       const text = usable(node.innerText);
-      const choice = attr.length >= text.length ? attr : text;
-      if (choice.length > best.length) best = choice;
+      const titled = /tit/i.test(String(node.className || "")) || node.tagName === "H3" || node.tagName === "H2";
+      const choice = titled && attr ? attr : (attr && text.includes("·") ? attr : (text || attr));
+      if (!choice || choice.includes("·")) continue;
+      if (!best || (titled && choice.length >= best.length) || choice.length > best.length) best = choice;
     }
-    return best;
+    return best || usable(link.getAttribute("title")) || usable((link.innerText || "").split("·")[0]);
   };
   const byId = new Map();
   for (const link of document.querySelectorAll("a")) {
@@ -79,7 +92,9 @@ COLLECT_JS = r"""
     const title = titleOf(link);
     if (!title) continue;
     const prev = byId.get(id);
-    if (!prev || title.length > prev.title.length) {
+    const prefer = !prev
+      || (title.includes("·") === prev.title.includes("·") ? title.length > prev.title.length : !title.includes("·"));
+    if (prefer) {
       byId.set(id, {title, id, x: box.x, y: box.y, right: box.x >= innerWidth * 0.62});
     }
   }

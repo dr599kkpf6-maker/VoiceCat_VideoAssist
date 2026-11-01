@@ -14,9 +14,13 @@ import startup_checks
 
 WAKE_KEYWORDS = "\n".join((
     "m āo sh ī f ù @猫师傅",
+    "m ǎo sh ī f ù @猫师傅",
+    "m ào sh ī f ù @猫师傅",
+    "m āo sh ī f u @猫师傅",
     "g āo sh ī f ù @高师傅",
     "m áo sh ī f ù @毛师傅",
     "m iāo sh ī f ù @喵师傅",
+    "l ǎo sh ī f ù @老师傅",
     "x iǎo m āo @小猫",
     "m āo m āo @猫猫",
 ))
@@ -89,8 +93,8 @@ class Listener:
             joiner=str(kws_dir / "joiner-epoch-12-avg-2-chunk-16-left-64.onnx"),
             keywords_file=str(keywords),
             num_threads=2,
-            keywords_score=2.2,
-            keywords_threshold=0.08,
+            keywords_score=3.2,
+            keywords_threshold=0.04,
             provider="cpu",
         )
         config = startup_checks.load_config()
