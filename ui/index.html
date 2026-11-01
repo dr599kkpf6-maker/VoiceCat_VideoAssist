@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>视频助手猫师傅</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <div class="aurora" aria-hidden="true">
@@ -33,24 +33,56 @@
 
     <section class="panel" aria-label="哔哩哔哩控制">
       <div class="topbar">
-        <div class="wave-slot">
-          <canvas class="wave" id="wave" width="448" height="56" hidden aria-hidden="true"></canvas>
-          <p class="caption" id="caption" hidden></p>
+        <div class="topbar-head">
+          <div class="wave-slot">
+            <canvas class="wave" id="wave" width="448" height="56" hidden aria-hidden="true"></canvas>
+            <p class="caption" id="caption" hidden></p>
+          </div>
+          <span class="elapsed" id="elapsed">00:00:00</span>
+          <button class="retry" id="retry" type="button" hidden aria-label="重试">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.3-5.6"></path>
+              <path d="M20 4.8V9h-4.2"></path>
+            </svg>
+          </button>
+          <button class="start" id="start" type="button">启动控制器</button>
         </div>
-        <span class="elapsed" id="elapsed">00:00:00</span>
-        <button class="retry" id="retry" type="button" hidden aria-label="重试">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20 12a8 8 0 1 1-2.3-5.6"></path>
-            <path d="M20 4.8V9h-4.2"></path>
-          </svg>
-        </button>
-        <button class="start" id="start" type="button">启动控制器</button>
+        <div class="inspector" id="inspector">
+          <div class="inspector-clip" id="inspector-clip">
+            <ul class="checks" id="checks" aria-live="polite"></ul>
+          </div>
+          <button class="fold" id="fold" type="button" aria-expanded="true" aria-controls="inspector-clip" aria-label="收起检测项">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path id="fold-icon" d="M6 14.5 12 8.5l6 6"></path>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="content">
-        <ul class="checks" id="checks" aria-live="polite"></ul>
+        <div class="guide">
+          <p class="guide-lead">「猫师傅」启动后可以语音控制视频客户端~解放双手！边吃边看！</p>
+          <h2 class="guide-title">操作指引</h2>
+          <ul class="guide-list">
+            <li><span class="guide-name">打开视频</span><span class="guide-say">说：猫师傅，我要看【XX视频】</span></li>
+            <li><span class="guide-name">看右边的</span><span class="guide-say">说：猫师傅，我要看右边的【XX视频】</span></li>
+            <li><span class="guide-name">放大全屏</span><span class="guide-say">说：猫师傅，放大全屏</span></li>
+            <li><span class="guide-name">暂停一下</span><span class="guide-say">说：猫师傅，暂停</span></li>
+            <li><span class="guide-name">继续播放</span><span class="guide-say">说：猫师傅，播放</span></li>
+            <li><span class="guide-name">大声一点</span><span class="guide-say">说：猫师傅，大声</span></li>
+            <li><span class="guide-name">小声一点</span><span class="guide-say">说：猫师傅，小声</span></li>
+            <li><span class="guide-name">不想出声</span><span class="guide-say">说：猫师傅，静音</span></li>
+            <li><span class="guide-name">下一条</span><span class="guide-say">说：猫师傅，下一个</span></li>
+            <li><span class="guide-name">上一条</span><span class="guide-say">说：猫师傅，上一个</span></li>
+            <li><span class="guide-name">换个栏目</span><span class="guide-say">说：猫师傅，切到直播</span></li>
+            <li><span class="guide-name">退回上页</span><span class="guide-say">说：猫师傅，返回</span></li>
+            <li><span class="guide-name">回到主页</span><span class="guide-say">说：猫师傅，返回主页</span></li>
+            <li><span class="guide-name">关掉视频</span><span class="guide-say">说：猫师傅，关闭当前视频</span></li>
+          </ul>
+          <p class="guide-note">喊成小猫、猫猫，或听成高师傅，猫师傅也答应。</p>
+        </div>
       </div>
+      <p class="watermark">@作者小红书：羊某又在刮</p>
     </section>
-    <p class="watermark">@作者小红书：羊某又在刮</p>
   </main>
 
   <div class="confirm" id="confirm" hidden>
@@ -63,6 +95,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

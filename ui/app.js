@@ -17,6 +17,9 @@ const confirmCancel = document.getElementById("confirm-cancel");
 const waveEl = document.getElementById("wave");
 const captionEl = document.getElementById("caption");
 const elapsedEl = document.getElementById("elapsed");
+const inspectorEl = document.getElementById("inspector");
+const foldBtn = document.getElementById("fold");
+const foldIcon = document.getElementById("fold-icon");
 const waveLevels = Array(40).fill(0);
 let wavePhase = 0;
 let waveFrame = 0;
@@ -26,6 +29,7 @@ let startedAt = 0;
 
 let mode = "idle";
 let busy = false;
+let checksOpen = true;
 let token = 0;
 let permWatch = 0;
 let shown = [];
@@ -55,6 +59,12 @@ function paint() {
   waveEl.hidden = mode !== "started";
   captionEl.hidden = mode !== "started";
   if (mode !== "started") captionEl.textContent = "";
+  inspectorEl.classList.toggle("is-open", mode !== "idle");
+  inspectorEl.classList.toggle("is-collapsed", !checksOpen);
+  document.getElementById("inspector-clip").setAttribute("aria-hidden", checksOpen ? "false" : "true");
+  foldBtn.setAttribute("aria-expanded", checksOpen ? "true" : "false");
+  foldBtn.setAttribute("aria-label", checksOpen ? "收起检测项" : "展开检测项");
+  foldIcon.setAttribute("d", checksOpen ? "M6 14.5 12 8.5l6 6" : "M6 9.5 12 15.5l6-6");
 
   const keep = new Set(shown);
   for (const child of [...checksEl.children]) {
@@ -268,6 +278,7 @@ async function inspect(id) {
 }
 
 function beginAll() {
+  checksOpen = true;
   permWatch += 1;
   shown = [];
   for (const item of ITEMS) delete results[item.id];
@@ -326,6 +337,7 @@ async function repair(id) {
 async function disconnect() {
   token += 1;
   permWatch += 1;
+  checksOpen = true;
   const wasStarted = mode === "started";
   busy = false;
   mode = "idle";
@@ -351,6 +363,11 @@ startBtn.addEventListener("click", () => {
 retryBtn.addEventListener("click", () => {
   if (busy || mode !== "failed") return;
   beginAll();
+});
+
+foldBtn.addEventListener("click", () => {
+  checksOpen = !checksOpen;
+  paint();
 });
 
 document.querySelectorAll(".tab.is-locked").forEach((tab) => {
