@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>视频助手</title>
+  <title>视频助手猫师傅</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -33,6 +33,10 @@
 
     <section class="panel" aria-label="哔哩哔哩控制">
       <div class="topbar">
+        <div class="meters">
+          <canvas class="wave" id="wave" width="224" height="56" hidden aria-hidden="true"></canvas>
+          <span class="elapsed" id="elapsed">00:00:00</span>
+        </div>
         <button class="retry" id="retry" type="button" hidden aria-label="重试">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 12a8 8 0 1 1-2.3-5.6"></path>
@@ -46,6 +50,16 @@
       </div>
     </section>
   </main>
+
+  <div class="confirm" id="confirm" hidden>
+    <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirm-text">
+      <p id="confirm-text">将关闭当前哔哩哔哩并重新打开</p>
+      <div class="confirm-actions">
+        <button class="confirm-ok" id="confirm-ok" type="button">确定</button>
+        <button class="confirm-cancel" id="confirm-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
