@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>视频助手猫师傅</title>
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
   <main class="window">
@@ -23,8 +23,8 @@
     <div class="workspace">
       <aside class="rail">
         <nav class="tabs" aria-label="平台">
-          <button class="tab is-active" type="button" aria-current="page"><span class="label">哔哩哔哩</span></button>
-          <button class="tab is-locked" type="button" aria-disabled="true"><span class="label">芒果TV</span></button>
+          <button class="tab is-active" type="button" data-platform="bilibili" aria-current="page"><span class="label">哔哩哔哩</span></button>
+          <button class="tab" type="button" data-platform="mango"><span class="label">芒果TV</span></button>
           <button class="tab is-locked" type="button" aria-disabled="true"><span class="label">红果</span></button>
         </nav>
       </aside>
@@ -60,7 +60,7 @@
             <p class="guide-lead">「猫师傅」启动后可以语音控制视频客户端~解放双手！边吃边看！</p>
             <div class="guide-rule" aria-hidden="true"></div>
             <h2 class="guide-title">操作指引</h2>
-            <ul class="guide-list">
+            <ul class="guide-list" id="guide-bilibili">
               <li><span class="guide-name">打开视频</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，我要看【视频名称】</span></li>
               <li><span class="guide-name">搜索</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，搜索【视频名称】</span></li>
               <li><span class="guide-name">清晰度</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，切换1080P</span></li>
@@ -83,6 +83,29 @@
               <li><span class="guide-name">上滑</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，上滑</span></li>
               <li><span class="guide-name">关视频</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，关闭当前视频</span></li>
             </ul>
+            <ul class="guide-list" id="guide-mango" hidden>
+              <li><span class="guide-name">打开视频</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，我要看【片名】</span></li>
+              <li><span class="guide-name">搜索</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，搜索【片名】</span></li>
+              <li><span class="guide-name">清晰度</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，切换1080</span></li>
+              <li><span class="guide-name">选集</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，下一集</span></li>
+              <li><span class="guide-name">全屏</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，全屏</span></li>
+              <li><span class="guide-name">退全屏</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，退出全屏</span></li>
+              <li><span class="guide-name">暂停</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，暂停</span></li>
+              <li><span class="guide-name">播放</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，播放</span></li>
+              <li><span class="guide-name">大声</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，大声</span></li>
+              <li><span class="guide-name">小声</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，小声</span></li>
+              <li><span class="guide-name">静音</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，静音</span></li>
+              <li><span class="guide-name">切栏目</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，切到综艺</span></li>
+              <li class="is-live"><span class="guide-name">看直播</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，我要看湖南卫视<span class="guide-note">先自己切到直播栏目</span></span></li>
+              <li><span class="guide-name">弹幕</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，开弹幕</span></li>
+              <li><span class="guide-name">小窗</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，小窗</span></li>
+              <li><span class="guide-name">倍速</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，1.5倍</span></li>
+              <li><span class="guide-name">下滑</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，下滑</span></li>
+              <li><span class="guide-name">上滑</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，上滑</span></li>
+              <li><span class="guide-name">返回</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，返回</span></li>
+              <li><span class="guide-name">回首页</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，返回首页</span></li>
+              <li><span class="guide-name">刷新</span><span class="guide-prompt">说：</span><span class="guide-command">猫师傅，刷新</span></li>
+            </ul>
           </div>
         </div>
         <p class="watermark">@作者：羊师傅</p>
@@ -102,6 +125,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

@@ -38,6 +38,19 @@ DEFAULT_CONFIG = {
         "volume_down": ["down"],
         "mute": ["m"],
     },
+    "mango": {
+        "debug_port": 9333,
+        "process": "芒果TV.exe",
+        "client_path": "",
+        "keys": {
+            "toggle_play": ["space"],
+            "fullscreen": ["f"],
+            "exit_fullscreen": ["escape"],
+            "volume_up": ["up"],
+            "volume_down": ["down"],
+            "mute": ["m"],
+        },
+    },
 }
 
 KWS_DIR = "sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
@@ -98,15 +111,54 @@ def load_config() -> dict:
     return merged
 
 
+def _client_settings(platform: str) -> dict:
+    if platform != "mango":
+        config = load_config()
+        try:
+            port = int(config.get("debug_port") or 9222)
+        except (TypeError, ValueError):
+            port = 9222
+        return {
+            "platform": "bilibili",
+            "label": "哔哩哔哩",
+            "process": str(config.get("process") or "哔哩哔哩.exe"),
+            "debug_port": port,
+            "client_path": str(config.get("client_path") or ""),
+            "keys": config.get("keys") if isinstance(config.get("keys"), dict) else {},
+        }
+    base = json.loads(json.dumps(DEFAULT_CONFIG["mango"]))
+    custom = load_config().get("mango")
+    if isinstance(custom, dict):
+        keys = dict(base.get("keys") or {})
+        if isinstance(custom.get("keys"), dict):
+            keys.update(custom["keys"])
+        base.update(custom)
+        base["keys"] = keys
+    try:
+        base["debug_port"] = int(base.get("debug_port") or 9333)
+    except (TypeError, ValueError):
+        base["debug_port"] = 9333
+    base["platform"] = "mango"
+    base["label"] = "芒果TV"
+    base["process"] = str(base.get("process") or "芒果TV.exe")
+    return base
+
+
 def _process_name() -> str:
-    return str(load_config().get("process") or "哔哩哔哩.exe")
+    return _client_settings("bilibili")["process"]
 
 
 def _debug_port() -> int:
-    try:
-        return int(load_config().get("debug_port") or 9222)
-    except (TypeError, ValueError):
-        return 9222
+    return int(_client_settings("bilibili")["debug_port"])
+
+
+def client_port(platform: str = "bilibili") -> int:
+    return int(_client_settings(platform)["debug_port"])
+
+
+def client_keys(platform: str = "bilibili") -> dict:
+    keys = _client_settings(platform).get("keys")
+    return keys if isinstance(keys, dict) else {}
 
 
 def _pids_named(image_name: str) -> list[int]:
@@ -177,50 +229,62 @@ def _port_open(port: int) -> bool:
         return False
 
 
-def client_status() -> dict:
-    name = _process_name()
+def client_status(platform: str = "bilibili") -> dict:
+    settings = _client_settings(platform)
+    name = settings["process"]
     pids = _pids_named(name)
     window = _has_main_window(set(pids))
-    port = _port_open(_debug_port())
+    port = _port_open(int(settings["debug_port"]))
     return {"running": bool(pids), "window": window, "port": port}
 
 
-def check_client() -> dict:
-    status = client_status()
+def check_client(platform: str = "bilibili") -> dict:
+    settings = _client_settings(platform)
+    status = client_status(platform)
     ok = status["window"] and status["port"]
+    label = settings["label"]
     if ok:
-        log("客户端检查通过")
+        log("客户端检查通过" if platform != "mango" else "芒果TV客户端检查通过")
     elif not status["running"]:
-        log("客户端检查失败：哔哩哔哩没有启动")
+        log(f"客户端检查失败：{label}没有启动")
     elif not status["window"]:
-        log("客户端检查失败：没有找到哔哩哔哩窗口")
+        log(f"客户端检查失败：没有找到{label}窗口")
     else:
-        log("客户端检查失败：调试端口不可连接")
+        log("客户端检查失败：调试端口不可连接" if platform != "mango" else "芒果TV客户端检查失败：调试端口不可连接")
     return {"ok": ok, **status}
 
 
-def _configured_client_path() -> Path | None:
-    raw = str(load_config().get("client_path") or "").strip()
+def _configured_client_path(platform: str = "bilibili") -> Path | None:
+    raw = str(_client_settings(platform).get("client_path") or "").strip()
     if raw and Path(raw).is_file():
         return Path(raw)
     return None
 
 
-def _installed_client_path() -> Path | None:
-    configured = _configured_client_path()
+def _installed_client_path(platform: str = "bilibili") -> Path | None:
+    configured = _configured_client_path(platform)
     if configured:
         return configured
-    name = _process_name()
+    settings = _client_settings(platform)
+    name = settings["process"]
     for pid in _pids_named(name):
         path = _executable_path(pid)
         if path and Path(path).is_file():
             return Path(path)
-    roots = [
-        Path(r"E:\Program Files\bilibili"),
-        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "bilibili",
-        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "bilibili",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "bilibili",
-    ]
+    if platform == "mango":
+        roots = [
+            Path(r"F:\mangguoTV\MGTVPCC"),
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "MGTVPCC",
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "MGTVPCC",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "MGTVPCC",
+        ]
+    else:
+        roots = [
+            Path(r"E:\Program Files\bilibili"),
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "bilibili",
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "bilibili",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "bilibili",
+        ]
     for root in roots:
         candidate = root / name
         if candidate.is_file():
@@ -228,8 +292,8 @@ def _installed_client_path() -> Path | None:
     return None
 
 
-def _close_client() -> None:
-    name = _process_name()
+def _close_client(platform: str = "bilibili") -> None:
+    name = _client_settings(platform)["process"]
     subprocess.run(["taskkill", "/IM", name, "/T"], capture_output=True, timeout=8)
     deadline = time.time() + 4
     while time.time() < deadline and _pids_named(name):
@@ -239,32 +303,35 @@ def _close_client() -> None:
         time.sleep(0.6)
 
 
-def _wait_until_ready(timeout: float = 20) -> bool:
+def _wait_until_ready(platform: str = "bilibili", timeout: float = 20) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        status = client_status()
+        status = client_status(platform)
         if status["window"] and status["port"]:
             return True
         time.sleep(0.4)
     return False
 
 
-def restart_client() -> dict:
-    exe = _installed_client_path()
+def restart_client(platform: str = "bilibili") -> dict:
+    settings = _client_settings(platform)
+    label = settings["label"]
+    exe = _installed_client_path(platform)
     if exe is None:
-        log("重启哔哩哔哩失败：没有找到客户端程序")
+        log(f"重启{label}失败：没有找到客户端程序")
         return {"ok": False}
-    port = _debug_port()
-    if client_status()["running"]:
-        log("关闭当前哔哩哔哩")
-        _close_client()
-    log(f"通过调试端口启动哔哩哔哩：{exe}")
-    subprocess.Popen(
-        [str(exe), f"--remote-debugging-port={port}"],
-        cwd=str(exe.parent),
-    )
-    ok = _wait_until_ready()
-    log("重启哔哩哔哩成功" if ok else "重启哔哩哔哩失败：窗口或调试端口没有就绪")
+    port = int(settings["debug_port"])
+    if client_status(platform)["running"]:
+        log(f"关闭当前{label}")
+        _close_client(platform)
+    log(f"通过调试端口启动{label}：{exe}")
+    arguments = [str(exe)]
+    if platform == "mango":
+        arguments.append("src:10")
+    arguments.append(f"--remote-debugging-port={port}")
+    subprocess.Popen(arguments, cwd=str(exe.parent))
+    ok = _wait_until_ready(platform)
+    log(f"重启{label}成功" if ok else f"重启{label}失败：窗口或调试端口没有就绪")
     return {"ok": ok}
 
 
@@ -414,9 +481,9 @@ def download_models() -> dict:
     return check_model()
 
 
-def check_item(item_id: str) -> dict:
+def check_item(item_id: str, platform: str = "bilibili") -> dict:
     if item_id == "client":
-        return check_client()
+        return check_client(platform)
     if item_id == "mic":
         return check_microphone()
     if item_id == "perm":
@@ -426,10 +493,10 @@ def check_item(item_id: str) -> dict:
     return {"ok": False}
 
 
-def repair_item(item_id: str) -> dict:
+def repair_item(item_id: str, platform: str = "bilibili") -> dict:
     if item_id == "client":
-        restart_client()
-        return check_client()
+        restart_client(platform)
+        return check_client(platform)
     if item_id == "mic":
         return check_microphone()
     if item_id == "perm":

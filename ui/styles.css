@@ -469,6 +469,8 @@ button { font-family: inherit; color: inherit; }
   list-style: none;
 }
 
+.guide-list[hidden] { display: none; }
+
 .guide-list li {
   display: grid;
   grid-template-columns: 72px 24px minmax(0, 1fr);

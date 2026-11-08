@@ -9,6 +9,7 @@ import webview
 
 import bilibili_controller
 import command_parser
+import mango_controller
 import startup_checks
 import voice_rec
 
@@ -24,28 +25,44 @@ class Session:
         self._lock = threading.Lock()
         self.listener = None
         self.caption = ""
+        self.platform = ""
 
-    def start_listening(self):
+    def start_listening(self, platform="bilibili"):
+        platform = platform if platform in {"bilibili", "mango"} else "bilibili"
+        label = "芒果TV" if platform == "mango" else "哔哩哔哩"
         with self._lock:
-            if self.listener is not None and self.listener.alive:
-                return {"ok": True}
+            if self.listener is not None and self.listener.alive and self.platform == platform:
+                return {"ok": True, "platform": platform}
+            previous = self.platform if self.listener is not None else ""
+            listener = self.listener
+            self.listener = None
             self.caption = ""
-            listener = voice_rec.Listener(self._on_text)
-            if not listener.start():
-                return {"ok": False}
-            self.listener = listener
+            self.platform = platform
+        if listener is not None:
+            listener.stop()
+            stopped = "芒果TV" if previous == "mango" else "哔哩哔哩"
+            startup_checks.log(f"{stopped}控制器已关闭")
+        with self._lock:
+            fresh = voice_rec.Listener(self._on_text)
+            if not fresh.start():
+                self.platform = ""
+                return {"ok": False, "platform": platform, "stopped": previous}
+            self.listener = fresh
             self.caption = ""
-            startup_checks.log("控制器已启动，开始监听")
-            return {"ok": True}
+        startup_checks.log(f"{label}控制器已启动，开始监听")
+        return {"ok": True, "platform": platform, "stopped": previous}
 
     def stop_listening(self):
         with self._lock:
             listener = self.listener
+            platform = self.platform
             self.listener = None
             self.caption = ""
+            self.platform = ""
         if listener is not None:
             listener.stop()
-            startup_checks.log("控制器已断开，停止监听")
+            label = "芒果TV" if platform == "mango" else "哔哩哔哩"
+            startup_checks.log(f"{label}控制器已断开，停止监听")
         return {"ok": True}
 
     def sound_level(self):
@@ -58,6 +75,10 @@ class Session:
         heard = (text or "").strip()
         if command_parser.has_wake(heard):
             self.caption = heard
+        if self.platform == "mango":
+            commands = command_parser.parse(heard, "mango")
+            mango_controller.execute(heard, commands)
+            return
         commands = command_parser.parse(heard)
         bilibili_controller.execute(heard, commands)
 
@@ -87,17 +108,17 @@ class Api:
         if self._window is not None:
             self._window.destroy()
 
-    def check_item(self, item_id):
-        return startup_checks.check_item(str(item_id))
+    def check_item(self, item_id, platform="bilibili"):
+        return startup_checks.check_item(str(item_id), str(platform or "bilibili"))
 
-    def repair_item(self, item_id):
-        return startup_checks.repair_item(str(item_id))
+    def repair_item(self, item_id, platform="bilibili"):
+        return startup_checks.repair_item(str(item_id), str(platform or "bilibili"))
 
-    def client_status(self):
-        return startup_checks.client_status()
+    def client_status(self, platform="bilibili"):
+        return startup_checks.client_status(str(platform or "bilibili"))
 
-    def start_listening(self):
-        return self.session.start_listening()
+    def start_listening(self, platform="bilibili"):
+        return self.session.start_listening(str(platform or "bilibili"))
 
     def stop_listening(self):
         return self.session.stop_listening()

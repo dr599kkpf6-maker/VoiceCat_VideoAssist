@@ -85,14 +85,15 @@ def _normalize_wake(text: str) -> str:
     return _LOOSE_WAKE.sub(WAKE, "".join(pieces))
 
 
-def parse(text: str) -> list[dict]:
+def parse(text: str, platform: str = "bilibili") -> list[dict]:
     cleaned = _mend_wake(_SPACE.sub("", _TAG.sub("", text or "")))
     if not has_wake(cleaned):
         return []
+    reader = parse_mango_one if platform == "mango" else parse_one
     commands = []
     for part in _normalize_wake(cleaned).split(WAKE)[1:]:
         segment = _EDGE.sub("", part)
-        commands.append(parse_one(segment))
+        commands.append(reader(segment))
     return commands
 
 
@@ -161,6 +162,135 @@ def parse_one(segment: str) -> dict:
         "query": query,
         "text": segment,
     }
+
+
+_MANGO_TABS = ("本地播放", "纪录片", "电视剧", "综艺", "电影", "动漫", "少儿", "直播", "首页")
+_MANGO_TAB = re.compile(
+    rf"^(?:请|帮我|给我|我要|我想)?(?:切换|切+|换到|换|打开|看一下|看|现在)"
+    rf"(?:.(?=到|刀|倒|道))?(?:到|刀|倒|道)?({'|'.join(_MANGO_TABS)}){_TAB_TAIL}(?:一下|吧)?$"
+)
+_EPISODE = re.compile(
+    r"^(?:请|帮我|给我)?(?:我要看|我想看|播放|打开|看)?第([0-9]{1,3}|[零一二三四五六七八九十两]+)集(?:一下|吧)?$"
+    r"|^(?:请|帮我|给我)?(?:播放)?(?:下一集|上一集)(?:一下|吧)?$"
+)
+_DANMAKU = re.compile(r"^(?:请|帮我|给我)?(?:把)?(?:弹幕)?(?:打开|开启|关掉|关闭|开|关)(?:一下|掉)?弹幕(?:一下|吧)?$")
+_PIP = re.compile(r"^(?:请|帮我|给我)?(?:现在|在)?(?:退出|关闭|关掉|取消)?小窗(?:播放|模式)?(?:一下|吧)?$")
+_SPEED = re.compile(
+    r"^(?:请|帮我|给我)?(?:把)?(?:播放)?(?:速度|倍速)?(?:切换|切到|换成|调到|调成|设为|设置为)?"
+    r"(15倍速|15倍|1\.5倍速|1\.5倍|一点五倍速|一点五倍|二倍速|两倍速|2倍速|2倍|两倍|二倍|正常速度|原速|一倍速|1倍速|1倍)"
+    r"(?:播放)?(?:一下|吧)?$"
+)
+_MANGO_QUALITY = re.compile(
+    r"^(?:请|帮我|给我)?(?:把)?(?:视频)?(?:切换|切到|换成|换到|调到|调成|设置)?(?:清晰度|画质|分辨率)?(?:到|为|成)?"
+    r"(1080\s*[Pp]|1080|720\s*[Pp]|720|576\s*[Pp]|576|480\s*[Pp]|480|"
+    r"一零八零|一千零八十|七二零|七百二十|五七六|五百七十六|四八零|四百八十|蓝光|超清|高清|标清)"
+    r"(?:清晰度|画质)?(?:一下|吧)?$",
+    re.IGNORECASE,
+)
+
+
+def parse_mango_one(segment: str) -> dict:
+    segment = _COMPACT.sub("", _EDGE.sub("", segment or ""))
+    if not segment:
+        return {"intent": "unknown", "text": ""}
+    softened = _soften(segment)
+    if _HOME.fullmatch(softened):
+        return {"intent": "home", "text": segment}
+    if _REFRESH.fullmatch(softened):
+        return {"intent": "refresh", "text": segment}
+    scroll = _SCROLL.fullmatch(softened)
+    if scroll:
+        direction = "up" if "上" in softened else "down"
+        return {"intent": "scroll", "direction": direction, "text": segment}
+    if _BACK.fullmatch(softened):
+        return {"intent": "back", "text": segment}
+    tab = _MANGO_TAB.fullmatch(softened)
+    if tab and "右边" not in segment:
+        return {"intent": "switch_tab", "tab": tab.group(1), "text": segment}
+    episode = _EPISODE.fullmatch(softened)
+    if episode and "右边" not in segment:
+        if "上一集" in softened:
+            return {"intent": "episode", "direction": "previous", "text": segment}
+        if "下一集" in softened:
+            return {"intent": "episode", "direction": "next", "text": segment}
+        return {"intent": "episode", "number": _cn_number(episode.group(1)), "text": segment}
+    if "我要看" not in segment and "右边" not in segment:
+        if _EXIT_FULL.fullmatch(softened):
+            return {"intent": "exit_fullscreen", "text": segment}
+        if "全屏" in segment:
+            return {"intent": "fullscreen", "text": segment}
+        if re.search(r"静音", segment):
+            return {"intent": "volume", "direction": "mute", "text": segment}
+        if re.search(r"大声|音量加|声音大|音量调高|调大", segment):
+            return {"intent": "volume", "direction": "up", "text": segment}
+        if re.search(r"小声|音量减|声音小|音量调低|调小", segment):
+            return {"intent": "volume", "direction": "down", "text": segment}
+        if _PLAY.fullmatch(softened):
+            return {"intent": "toggle_play", "text": segment}
+        if _DANMAKU.fullmatch(softened):
+            opened = "开" in softened and "关" not in softened
+            return {"intent": "danmaku", "state": "on" if opened else "off", "text": segment}
+        if _PIP.fullmatch(softened):
+            opened = not re.match(r"^(?:请|帮我|给我)?(?:现在|在)?(?:退出|关闭|关掉|取消)", softened)
+            return {"intent": "pip", "state": "on" if opened else "off", "text": segment}
+        speed = _SPEED.fullmatch(softened)
+        if speed:
+            return {"intent": "speed", "value": _speed_value(speed.group(1)), "text": segment}
+    quality = _MANGO_QUALITY.fullmatch(softened)
+    if quality and "右边" not in segment and "我要看" not in segment:
+        return {"intent": "quality", "level": _mango_quality(quality.group(1)), "text": segment}
+    found = _SEARCH.fullmatch(softened)
+    if found and "右边" not in segment:
+        name = _clean_search(found.group(1))
+        if len(_COMPACT.sub("", name)) >= 2 and name != "视频":
+            return {"intent": "search", "query": name, "text": segment}
+    query = _title_query(segment)
+    if not query:
+        return {"intent": "unknown", "text": segment}
+    return {"intent": "open_title", "query": query, "text": segment}
+
+
+def _cn_number(token: str) -> int:
+    text = str(token or "")
+    if text.isdigit():
+        return int(text)
+    digits = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if text == "十":
+        return 10
+    if "十" in text:
+        left, _, right = text.partition("十")
+        tens = digits.get(left, 1 if not left else 0)
+        ones = digits.get(right, 0) if right else 0
+        if left and left not in digits:
+            return 0
+        return tens * 10 + ones
+    return digits.get(text, 0)
+
+
+def _speed_value(token: str) -> str:
+    text = token or ""
+    if "1.5" in text or "一点五" in text or text.startswith("15"):
+        return "1.5"
+    if text.startswith(("二", "两", "2")):
+        return "2"
+    return "1"
+
+
+def _mango_quality(token: str) -> str:
+    text = re.sub(r"\s+", "", token or "")
+    named = {"蓝光": "蓝光", "超清": "超清", "高清": "高清", "标清": "标清"}
+    if text in named:
+        return named[text]
+    upper = text.upper()
+    if upper.startswith("1080") or text in {"一零八零", "一千零八十"}:
+        return "1080"
+    if upper.startswith("720") or text in {"七二零", "七百二十"}:
+        return "720"
+    if upper.startswith("576") or text in {"五七六", "五百七十六"}:
+        return "576"
+    if upper.startswith("480") or text in {"四八零", "四百八十"}:
+        return "480"
+    return text
 
 
 def _clean_search(name: str) -> str:
