@@ -142,7 +142,7 @@ def _claim_single_instance() -> bool:
 
 def _focus_existing() -> None:
     user32 = ctypes.windll.user32
-    hwnd = user32.FindWindowW(None, "视频助手猫师傅")
+    hwnd = user32.FindWindowW(None, "猫师傅VoiceCat(=^･ω･^=)")
     if not hwnd:
         return
     user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)
@@ -163,7 +163,7 @@ def main() -> None:
     page = (app_dir() / "ui" / "index.html").resolve()
     api = Api()
     api._window = webview.create_window(
-        "视频助手猫师傅",
+        "猫师傅VoiceCat(=^･ω･^=)",
         page.as_uri(),
         width=840,
         height=552,

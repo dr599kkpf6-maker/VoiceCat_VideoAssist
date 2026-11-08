@@ -524,13 +524,108 @@ button { font-family: inherit; color: inherit; }
 
 .watermark {
   flex: none;
-  align-self: flex-end;
   margin: 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 13px;
   pointer-events: none;
   user-select: none;
+}
+
+.mark-row {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tip {
+  position: relative;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tip-mark {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(119, 97, 175, 0.45);
+  border-radius: 50%;
+  color: var(--purple);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.tip-card {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 332px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(48, 48, 70, 0.16);
+  text-align: left;
+}
+
+.tip:hover .tip-card,
+.tip:focus-visible .tip-card,
+.tip:focus-within .tip-card {
+  display: block;
+}
+
+.tip:hover::before,
+.tip:focus-within::before {
+  content: "";
+  position: absolute;
+  right: -12px;
+  bottom: 100%;
+  width: 332px;
+  height: 10px;
+}
+
+.tip-copy {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.tip-codes {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}
+
+.tip-codes figure {
+  margin: 0;
+  text-align: center;
+}
+
+.tip-codes img {
+  display: block;
+  width: 132px;
+  height: 132px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.tip-codes figcaption {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .retry { display: none; }
