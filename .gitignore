@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+build/
+*.spec
+docs/
+images/*
+!images/example.png
+!images/Alipay_payment.JPG
+!images/WeChat_payment.JPG
+dist/*
+!dist/*.exe
