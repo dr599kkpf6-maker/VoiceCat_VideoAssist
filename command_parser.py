@@ -18,6 +18,7 @@ _COMPACT = re.compile(r"[\s，。！？、,.!?:：;；\"'“”‘’（）()【
 _TAB_TAIL = "(?:栏目|南目|南幕|蓝目|兰目|男目|拦目|栏木|南木|栏幕|频道|页面|页|区|栏)?"
 _BREATH = re.compile(r"[嗯啊呃额哦噢喔哈呵哼嘿呀呐唔吖诶唉嗨]+")
 _LOOSE_WAKE = re.compile(r"(?<![猫高毛喵老小])[A-Za-z哦喔欧奥噢啊额厄]?师傅")
+_MISHEARD_FU = re.compile(r"(?<=[猫高毛喵老小])师普")
 _TAB = re.compile(
     rf"^(?:请|帮我|给我|我要|我想)?(?:切换|切+|换到|换|打开|看一下|看|现在)"
     rf"(?:.(?=到|刀|倒|道))?(?:到|刀|倒|道)?({'|'.join(TABS)}){_TAB_TAIL}(?:一下|吧)?$"
@@ -39,6 +40,10 @@ _CLOSE = re.compile(
     r"|^(?:请|帮我|给我)?(?:把)?(?:当前|这个|正在看的|正在播放的)视频(?:窗口)?(?:关闭|关掉|关上|关了)(?:一下|吧|了)?$"
 )
 _PLAY = re.compile(r"^(?:请|帮我|给我)?(?:把视频)?(?:现在|在)?(?:暂停|播放|继续)+(?:一下|吧|视频|了|啊)?$")
+_EXIT_FULL = re.compile(
+    r"^(?:请|帮我|给我)?(?:现在|在)?(?:退出|取消|关闭|关掉)全屏(?:幕)?(?:观看|播放|模式)?(?:一下|吧)?$"
+    r"|^(?:请|帮我|给我)?窗口观看(?:一下|吧)?$"
+)
 _LIVE_OPEN = re.compile(
     r"^(?:请|帮我|给我)?(?:我要|我想)?(?:看|打开|播放)(?:一下)?(.+?)(?:这场|这个|的)?直播(?:间)?(?:一下|吧)?$"
 )
@@ -56,8 +61,12 @@ _TITLE_PREFIX = re.compile(r"^(?:我要看|我想看|想看|给我放|给我看|
 _TITLE_SUFFIX = re.compile(r"(?:这个视频|那条视频|视频)$")
 
 
+def _mend_wake(text: str) -> str:
+    return _MISHEARD_FU.sub("师傅", text)
+
+
 def has_wake(text: str) -> bool:
-    cleaned = _SPACE.sub("", _TAG.sub("", text or ""))
+    cleaned = _mend_wake(_SPACE.sub("", _TAG.sub("", text or "")))
     return any(alias in cleaned for alias in WAKE_ALIASES) or "师傅" in cleaned
 
 
@@ -77,7 +86,7 @@ def _normalize_wake(text: str) -> str:
 
 
 def parse(text: str) -> list[dict]:
-    cleaned = _SPACE.sub("", _TAG.sub("", text or ""))
+    cleaned = _mend_wake(_SPACE.sub("", _TAG.sub("", text or "")))
     if not has_wake(cleaned):
         return []
     commands = []
@@ -118,6 +127,8 @@ def parse_one(segment: str) -> dict:
     if _PREV.search(segment) and "右边" not in segment:
         return {"intent": "adjacent", "direction": "previous", "text": segment}
     if "我要看" not in segment and "右边" not in segment:
+        if _EXIT_FULL.fullmatch(softened):
+            return {"intent": "exit_fullscreen", "text": segment}
         if "全屏" in segment:
             return {"intent": "fullscreen", "text": segment}
         if re.search(r"静音", segment):

@@ -161,6 +161,9 @@ def _execute_one(heard: str, command: dict) -> None:
     if intent in {"toggle_play", "fullscreen"}:
         _send_named(heard, intent, KEY_ACTION[intent])
         return
+    if intent == "exit_fullscreen":
+        _exit_fullscreen(heard)
+        return
     if intent == "volume":
         _send_named(heard, intent, KEY_ACTION[command.get("direction") or ""])
         return
@@ -198,6 +201,56 @@ def _execute_one(heard: str, command: dict) -> None:
         _close_video(heard)
         return
     startup_checks.log(f"听到「{heard}」，没有对上指令")
+
+
+_FULLSCREEN_STATE_JS = r"""
+(() => {
+  if (document.fullscreenElement) return "on";
+  const blob = [
+    document.documentElement.className,
+    document.body.className,
+    ...[...document.querySelectorAll(".bpx-player-container, [class*='player']")].slice(0, 6).map((el) => el.className),
+  ].join(" ");
+  if (/bpx-state-fullscreen|bpx-state-web-fullscreen|player-fullscreen|mode-fullscreen/.test(blob)) return "on";
+  for (const el of document.querySelectorAll("[aria-label*='全屏'],[title*='全屏']")) {
+    const text = String(el.getAttribute("aria-label") || el.getAttribute("title") || "").replace(/\s+/g, "");
+    if (text === "退出全屏" || text === "取消全屏") return "on";
+    if (text === "全屏" || text === "进入全屏" || text === "网页全屏") return "off";
+  }
+  return "unknown";
+})()
+"""
+
+
+def _exit_fullscreen(heard: str) -> None:
+    pages = _pages()
+    if pages is None:
+        startup_checks.log(f"听到「{heard}」，退出全屏，调试端口不可连接")
+        return
+    player = _player_page(pages)
+    if player is None:
+        startup_checks.log(f"听到「{heard}」，退出全屏，没有正在播放的视频")
+        return
+    state = _eval(player["ws"], _FULLSCREEN_STATE_JS)
+    if state == "off":
+        startup_checks.log(f"听到「{heard}」，退出全屏，已经是窗口观看")
+        return
+    if state != "on":
+        startup_checks.log(f"听到「{heard}」，退出全屏，看不出是不是全屏，没有退出")
+        return
+    keys = startup_checks.load_config().get("keys") or {}
+    names = keys.get("fullscreen") if isinstance(keys, dict) else None
+    if not isinstance(names, list) or not names or any(str(name).lower() not in VK for name in names):
+        startup_checks.log(f"听到「{heard}」，退出全屏，快捷键无效")
+        return
+    if not _focus_client():
+        startup_checks.log(f"听到「{heard}」，退出全屏，窗口没能置前")
+        return
+    for name in names:
+        virtual_key = VK[str(name).lower()]
+        _tap(virtual_key)
+        time.sleep(0.05)
+    startup_checks.log(f"听到「{heard}」，退出全屏，已改为窗口观看")
 
 
 def _send_named(heard: str, intent: str, action: str) -> None:
