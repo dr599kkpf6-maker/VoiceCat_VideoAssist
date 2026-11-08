@@ -67,7 +67,9 @@ def _mend_wake(text: str) -> str:
 
 def has_wake(text: str) -> bool:
     cleaned = _mend_wake(_SPACE.sub("", _TAG.sub("", text or "")))
-    return any(alias in cleaned for alias in WAKE_ALIASES) or "师傅" in cleaned
+    if any(alias in cleaned for alias in WAKE_ALIASES) or "师傅" in cleaned:
+        return True
+    return _phonetic_wake_span(cleaned) is not None
 
 
 def _normalize_wake(text: str) -> str:
@@ -82,7 +84,14 @@ def _normalize_wake(text: str) -> str:
         else:
             pieces.append(text[index])
             index += 1
-    return _LOOSE_WAKE.sub(WAKE, "".join(pieces))
+    normalized = _LOOSE_WAKE.sub(WAKE, "".join(pieces))
+    if WAKE in normalized:
+        return normalized
+    span = _phonetic_wake_span(normalized)
+    if span is None:
+        return normalized
+    start, end = span
+    return normalized[:start] + WAKE + normalized[end + 1:]
 
 
 def parse(text: str, platform: str = "bilibili") -> list[dict]:
@@ -97,10 +106,164 @@ def parse(text: str, platform: str = "bilibili") -> list[dict]:
     return commands
 
 
+_PINYIN_INITIALS = (
+    "zh", "ch", "sh", "b", "p", "m", "f", "d", "t", "n", "l",
+    "g", "k", "h", "j", "q", "x", "r", "z", "c", "s", "y", "w",
+)
+_SIBILANT = set("j q x zh ch sh z c s".split())
+_UNASPIRATED = {"b": "b", "p": "b", "d": "d", "t": "d", "g": "g", "k": "g"}
+_NASAL_FINAL = {
+    "ang": "an", "an": "an", "eng": "en", "en": "en", "ing": "in", "in": "in",
+    "iang": "ian", "ian": "ian", "uang": "uan", "uan": "uan",
+}
+_SOUND_ACCEPT = 88.0
+_SOUND_MARGIN = 8.0
+_WAKE_ACCEPT = 87.0
+_CLIP = re.compile(r"^(?:请|帮我|给我|现在)+|(?:一下|吧|了|啊|呀|哦|噢)+$")
+_CATALOG: dict[str, list[tuple[dict, str, str]]] = {}
+
+
 def _soften(segment: str) -> str:
     text = _BREATH.sub("", segment)
-    text = re.sub(r"切{2,}", "切", text)
-    return re.sub(r"到{2,}", "到", text)
+    return re.sub(r"(.)\1+", r"\1", text)
+
+
+def _syllables(text: str, dedupe: bool) -> list[str]:
+    sounds = []
+    for sound in lazy_pinyin(text or "", style=Style.NORMAL, errors="ignore"):
+        if not sound.isalpha():
+            continue
+        if dedupe and sounds and sounds[-1] == sound:
+            continue
+        sounds.append(sound)
+    return sounds
+
+
+def _skeleton(syllable: str) -> str:
+    initial = next((item for item in _PINYIN_INITIALS if syllable.startswith(item) and len(syllable) > len(item)), "")
+    final = syllable[len(initial):]
+    if initial in _SIBILANT:
+        initial = "z"
+    else:
+        initial = _UNASPIRATED.get(initial, initial)
+    return initial + _NASAL_FINAL.get(final, final)
+
+
+def _sound_forms(text: str, dedupe: bool) -> tuple[str, str]:
+    sounds = _syllables(text, dedupe)
+    return "".join(sounds), "".join(_skeleton(item) for item in sounds)
+
+
+def _sound_score(heard_raw: str, heard_skel: str, wanted_raw: str, wanted_skel: str) -> float:
+    if not heard_raw or not wanted_raw:
+        return 0.0
+    raw = fuzz.ratio(heard_raw, wanted_raw)
+    if raw < 70:
+        return raw
+    return max(raw, fuzz.ratio(heard_skel, wanted_skel))
+
+
+def _clip_phrase(text: str) -> str:
+    clipped = (text or "").replace("一下", "")
+    while True:
+        nxt = _CLIP.sub("", clipped)
+        if nxt == clipped:
+            return nxt
+        clipped = nxt
+
+
+def _phonetic_wake_span(text: str) -> tuple[int, int] | None:
+    han = [(index, char) for index, char in enumerate(text) if "\u4e00" <= char <= "\u9fff"]
+    best: tuple[float, int, int] | None = None
+    for alias in WAKE_ALIASES:
+        size = len(alias)
+        if len(han) < size:
+            continue
+        window = han[:size]
+        heard, _ = _sound_forms("".join(char for _, char in window), False)
+        score = fuzz.ratio(heard, _sound_forms(alias, False)[0])
+        if score >= _WAKE_ACCEPT and (best is None or score > best[0]):
+            best = (score, window[0][0], window[-1][0])
+    if best is None:
+        return None
+    return best[1], best[2]
+
+
+def _remember(rows: list, payload: dict, phrases: tuple[str, ...]) -> None:
+    for phrase in phrases:
+        raw, skel = _sound_forms(phrase, True)
+        if len(_syllables(phrase, True)) < 2:
+            continue
+        rows.append((payload, raw, skel))
+
+
+def _build_catalog(platform: str) -> list[tuple[dict, str, str]]:
+    rows: list[tuple[dict, str, str]] = []
+    _remember(rows, {"intent": "exit_fullscreen"}, ("关闭全屏", "关掉全屏", "关上全屏", "退出全屏", "取消全屏", "窗口观看"))
+    _remember(rows, {"intent": "fullscreen"}, ("全屏", "打开全屏", "进入全屏", "切到全屏", "全屏观看", "全屏播放"))
+    _remember(rows, {"intent": "toggle_play"}, ("暂停", "播放", "继续", "暂停播放", "继续播放"))
+    _remember(rows, {"intent": "volume", "direction": "mute"}, ("静音", "关闭声音", "关掉声音"))
+    _remember(rows, {"intent": "volume", "direction": "up"}, ("大声", "音量加", "声音大", "音量调高", "调大"))
+    _remember(rows, {"intent": "volume", "direction": "down"}, ("小声", "音量减", "声音小", "音量调低", "调小"))
+    _remember(rows, {"intent": "back"}, ("返回", "回去", "返回上一页", "回到上一页"))
+    _remember(rows, {"intent": "home"}, ("返回首页", "回到首页", "返回主页", "回到主页", "回首页", "回主页", "返回主界面"))
+    _remember(rows, {"intent": "refresh"}, ("刷新", "刷新页面", "刷新当前页面"))
+    _remember(rows, {"intent": "scroll", "direction": "up"}, ("上滑", "往上滑", "向上滑", "上滚", "往上滚"))
+    _remember(rows, {"intent": "scroll", "direction": "down"}, ("下滑", "往下滑", "向下滑", "下滚", "往下滚"))
+    if platform != "mango":
+        _remember(rows, {"intent": "close_video"}, ("关闭当前视频", "关掉当前视频", "关闭视频", "关掉视频", "关闭当前窗口"))
+    tabs = _MANGO_TABS if platform == "mango" else TABS
+    for tab in tabs:
+        _remember(
+            rows,
+            {"intent": "switch_tab", "tab": tab},
+            (f"切到{tab}", f"切换到{tab}", f"换到{tab}", f"打开{tab}", f"切{tab}", f"看{tab}"),
+        )
+    if platform == "mango":
+        _remember(rows, {"intent": "danmaku", "state": "on"}, ("开弹幕", "打开弹幕", "开启弹幕"))
+        _remember(rows, {"intent": "danmaku", "state": "off"}, ("关弹幕", "关闭弹幕", "关掉弹幕"))
+        _remember(rows, {"intent": "pip", "state": "on"}, ("小窗", "小窗播放", "打开小窗"))
+        _remember(rows, {"intent": "pip", "state": "off"}, ("关闭小窗", "退出小窗", "关掉小窗"))
+        _remember(rows, {"intent": "speed", "value": "1.5"}, ("一点五倍", "一点五倍速"))
+        _remember(rows, {"intent": "speed", "value": "2"}, ("两倍", "二倍", "两倍速", "二倍速"))
+        _remember(rows, {"intent": "speed", "value": "1"}, ("正常速度", "原速", "一倍速"))
+        _remember(rows, {"intent": "episode", "direction": "next"}, ("下一集",))
+        _remember(rows, {"intent": "episode", "direction": "previous"}, ("上一集",))
+    else:
+        _remember(rows, {"intent": "adjacent", "direction": "next"}, ("下一个", "下一条", "下一集"))
+        _remember(rows, {"intent": "adjacent", "direction": "previous"}, ("上一个", "上一条", "上一集"))
+    return rows
+
+
+def _catalog(platform: str) -> list[tuple[dict, str, str]]:
+    found = _CATALOG.get(platform)
+    if found is None:
+        found = _build_catalog(platform)
+        _CATALOG[platform] = found
+    return found
+
+
+def _rescue(text: str, platform: str) -> dict | None:
+    clipped = _clip_phrase(text)
+    if re.search(r"\d", clipped):
+        return None
+    heard = _syllables(clipped, True)
+    if len(heard) < 2 or len(heard) > 8:
+        return None
+    heard_raw, heard_skel = _sound_forms(clipped, True)
+    best: dict[tuple, tuple[float, dict]] = {}
+    for payload, raw, skel in _catalog(platform):
+        score = _sound_score(heard_raw, heard_skel, raw, skel)
+        key = tuple(sorted(payload.items()))
+        current = best.get(key)
+        if current is None or score > current[0]:
+            best[key] = (score, payload)
+    ranked = sorted(best.values(), key=lambda item: item[0], reverse=True)
+    if not ranked or ranked[0][0] < _SOUND_ACCEPT:
+        return None
+    if len(ranked) > 1 and ranked[0][0] - ranked[1][0] < _SOUND_MARGIN:
+        return None
+    return dict(ranked[0][1])
 
 
 def parse_one(segment: str) -> dict:
@@ -128,6 +291,10 @@ def parse_one(segment: str) -> dict:
     if _PREV.search(segment) and "右边" not in segment:
         return {"intent": "adjacent", "direction": "previous", "text": segment}
     if "我要看" not in segment and "右边" not in segment:
+        rescued = _rescue(softened, "bilibili")
+        if rescued:
+            rescued["text"] = segment
+            return rescued
         if _EXIT_FULL.fullmatch(softened):
             return {"intent": "exit_fullscreen", "text": segment}
         if "全屏" in segment:
@@ -215,6 +382,10 @@ def parse_mango_one(segment: str) -> dict:
             return {"intent": "episode", "direction": "next", "text": segment}
         return {"intent": "episode", "number": _cn_number(episode.group(1)), "text": segment}
     if "我要看" not in segment and "右边" not in segment:
+        rescued = _rescue(softened, "mango")
+        if rescued:
+            rescued["text"] = segment
+            return rescued
         if _EXIT_FULL.fullmatch(softened):
             return {"intent": "exit_fullscreen", "text": segment}
         if "全屏" in segment:
