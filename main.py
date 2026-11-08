@@ -1,5 +1,8 @@
+import ctypes
+import os
 import sys
 import threading
+import traceback
 from pathlib import Path
 
 import webview
@@ -62,6 +65,27 @@ class Session:
 class Api:
     def __init__(self):
         self.session = Session()
+        # 必须用下划线开头。页面桥接会遍历公开属性，碰到原生窗口会在界面线程上互锁，窗口就会变成“未响应”。
+        self._window = None
+        self._maximized = False
+
+    def minimize_window(self):
+        if self._window is not None:
+            self._window.minimize()
+
+    def toggle_window(self):
+        if self._window is None:
+            return
+        if self._maximized:
+            self._window.restore()
+            self._maximized = False
+        else:
+            self._window.maximize()
+            self._maximized = True
+
+    def close_window(self):
+        if self._window is not None:
+            self._window.destroy()
 
     def check_item(self, item_id):
         return startup_checks.check_item(str(item_id))
@@ -82,19 +106,57 @@ class Api:
         return self.session.sound_level()
 
 
+_instance_mutex = None
+
+
+def _claim_single_instance() -> bool:
+    global _instance_mutex
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
+    kernel32.SetLastError(0)
+    _instance_mutex = kernel32.CreateMutexW(None, False, "Local\\VideoAssist.SingleInstance")
+    return kernel32.GetLastError() != 183
+
+
+def _focus_existing() -> None:
+    user32 = ctypes.windll.user32
+    hwnd = user32.FindWindowW(None, "视频助手猫师傅")
+    if not hwnd:
+        return
+    user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)
+    user32.SetForegroundWindow(hwnd)
+
+
+def _storage_path() -> str:
+    folder = Path(os.environ["APPDATA"]) / "VideoAssist" / "webview"
+    folder.mkdir(parents=True, exist_ok=True)
+    return str(folder)
+
+
 def main() -> None:
+    if not _claim_single_instance():
+        _focus_existing()
+        startup_checks.log("窗口已在运行，转到前台")
+        return
     page = (app_dir() / "ui" / "index.html").resolve()
-    webview.create_window(
+    api = Api()
+    api._window = webview.create_window(
         "视频助手猫师傅",
         page.as_uri(),
-        width=816,
-        height=492,
-        min_size=(816, 492),
-        background_color="#F7F3F8",
-        js_api=Api(),
+        width=840,
+        height=552,
+        min_size=(840, 552),
+        background_color="#F3F0FA",
+        frameless=True,
+        easy_drag=False,
+        js_api=api,
     )
-    webview.start()
+    webview.start(storage_path=_storage_path())
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        startup_checks.log("窗口启动失败：\n" + traceback.format_exc())

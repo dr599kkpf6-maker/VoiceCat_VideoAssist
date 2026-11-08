@@ -9,8 +9,6 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").match
 const startBtn = document.getElementById("start");
 const retryBtn = document.getElementById("retry");
 const checksEl = document.getElementById("checks");
-const windowEl = document.querySelector(".window");
-const glow = document.getElementById("glow");
 const confirmEl = document.getElementById("confirm");
 const confirmOk = document.getElementById("confirm-ok");
 const confirmCancel = document.getElementById("confirm-cancel");
@@ -41,30 +39,39 @@ function sleep(ms) {
 
 function icon(kind) {
   if (kind === "checking") return '<span class="spin"></span>';
-  const path = kind === "pass"
-    ? '<path d="M6 12.5 9.2 15.7 18 8"></path>'
-    : '<path d="M8 8l8 8M16 8l-8 8"></path>';
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+  const file = kind === "pass" ? "icons/check.svg" : "icons/fail.svg";
+  return `<img src="${file}" alt="">`;
 }
 
 function paint() {
   const starting = busy && mode !== "started" && mode !== "failed";
-  startBtn.textContent = mode === "started" ? "已启动" : mode === "failed" ? "启动失败" : "启动控制器";
+  document.getElementById("start-action").textContent = "启动控制器";
+  document.getElementById("start-state").textContent = mode === "started"
+    ? "已启动"
+    : mode === "failed"
+      ? "启动失败"
+      : starting
+        ? "启动中"
+        : "未启动";
   startBtn.classList.toggle("is-on", mode === "started");
   startBtn.classList.toggle("is-fail", mode === "failed");
   startBtn.classList.toggle("is-starting", starting);
   startBtn.setAttribute("aria-busy", starting ? "true" : "false");
-  retryBtn.hidden = mode !== "failed";
-  retryBtn.disabled = busy;
-  waveEl.hidden = mode !== "started";
+  retryBtn.hidden = true;
+  waveEl.hidden = mode === "idle";
   captionEl.hidden = mode !== "started";
   if (mode !== "started") captionEl.textContent = "";
+  if (mode !== "idle" && !waveFrame) drawWave();
+  if (mode === "idle" && waveFrame) {
+    cancelAnimationFrame(waveFrame);
+    waveFrame = 0;
+  }
   inspectorEl.classList.toggle("is-open", mode !== "idle");
   inspectorEl.classList.toggle("is-collapsed", !checksOpen);
   document.getElementById("inspector-clip").setAttribute("aria-hidden", checksOpen ? "false" : "true");
+  foldBtn.classList.toggle("is-collapsed", !checksOpen);
   foldBtn.setAttribute("aria-expanded", checksOpen ? "true" : "false");
   foldBtn.setAttribute("aria-label", checksOpen ? "收起检测项" : "展开检测项");
-  foldIcon.setAttribute("d", checksOpen ? "M6 14.5 12 8.5l6 6" : "M6 9.5 12 15.5l6-6");
 
   const keep = new Set(shown);
   for (const child of [...checksEl.children]) {
@@ -145,13 +152,12 @@ function drawWave() {
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  ctx.strokeStyle = "rgba(109, 92, 130, 0.9)";
+  ctx.strokeStyle = "rgba(119, 97, 175, 0.9)";
   const mid = height / 2;
   waveLevels.forEach((level, index) => {
     const x = (index / (waveLevels.length - 1)) * (width - 4) + 2;
-    const y = level < 0.04
-      ? mid
-      : mid + Math.sin(index * 0.72 + wavePhase) * level * (height * 0.46);
+    const amp = level < 0.04 ? height * 0.16 : level * (height * 0.42);
+    const y = mid + Math.sin(index * 0.62 + wavePhase) * amp;
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -356,9 +362,22 @@ async function disconnect() {
 
 startBtn.addEventListener("click", () => {
   if (busy) return;
-  if (mode === "idle") beginAll();
+  if (mode === "idle" || mode === "failed") beginAll();
   else if (mode === "started") disconnect();
 });
+
+async function controlWindow(name) {
+  try {
+    const api = await bridge();
+    if (typeof api[name] === "function") await api[name]();
+  } catch (error) {
+    return;
+  }
+}
+
+document.getElementById("win-min").addEventListener("click", () => controlWindow("minimize_window"));
+document.getElementById("win-max").addEventListener("click", () => controlWindow("toggle_window"));
+document.getElementById("win-close").addEventListener("click", () => controlWindow("close_window"));
 
 retryBtn.addEventListener("click", () => {
   if (busy || mode !== "failed") return;
@@ -373,22 +392,3 @@ foldBtn.addEventListener("click", () => {
 document.querySelectorAll(".tab.is-locked").forEach((tab) => {
   tab.addEventListener("click", (event) => event.preventDefault());
 });
-
-if (!reduceMotion) {
-  let x = 180;
-  let y = 120;
-  let tx = x;
-  let ty = y;
-  windowEl.addEventListener("pointermove", (event) => {
-    const rect = windowEl.getBoundingClientRect();
-    tx = event.clientX - rect.left;
-    ty = event.clientY - rect.top;
-  });
-  const follow = () => {
-    x += (tx - x) * 0.12;
-    y += (ty - y) * 0.12;
-    glow.style.transform = `translate(${x - 130}px, ${y - 130}px)`;
-    requestAnimationFrame(follow);
-  };
-  follow();
-}

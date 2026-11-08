@@ -25,7 +25,13 @@ _TAB = re.compile(
 _NEXT = re.compile(r"(下一个|下一条|下一集|我要看下一个|看下一个)")
 _PREV = re.compile(r"(上一个|上一条|上一集|我要看上一个|看上一个)")
 _HOME = re.compile(
-    r"^(?:请|帮我|给我)?(?:返回|回到|回)+(?:一下|到|去)?(?:主界面|主页面|主页|首页)(?:一下|吧|去)?$"
+    r"^(?:请|帮我|给我)?(?:现在|在)?(?:返回|回到|回)+(?:一下|到|去)?(?:主界面|主页面|主页|首页面|首页)(?:一下|吧|去|了)?$"
+)
+_REFRESH = re.compile(
+    r"^(?:请|帮我|给我)?(?:刷新)+(?:一下)?(?:当前页面|这个页面|当前页|页面)?(?:一下|吧)?$"
+)
+_SCROLL = re.compile(
+    r"^(?:请|帮我|给我)?(?:往上|向上|上|往下|向下|下)(?:滑|滚动|滚)(?:一下|页面|列表|吧)?$"
 )
 _BACK = re.compile(r"^(?:请)?(?:返回上一页|回到上一页|返回上一个页面|返回|回去)$")
 _CLOSE = re.compile(
@@ -33,6 +39,19 @@ _CLOSE = re.compile(
     r"|^(?:请|帮我|给我)?(?:把)?(?:当前|这个|正在看的|正在播放的)视频(?:窗口)?(?:关闭|关掉|关上|关了)(?:一下|吧|了)?$"
 )
 _PLAY = re.compile(r"^(?:请|帮我|给我)?(?:把视频)?(?:现在|在)?(?:暂停|播放|继续)+(?:一下|吧|视频|了|啊)?$")
+_LIVE_OPEN = re.compile(
+    r"^(?:请|帮我|给我)?(?:我要|我想)?(?:看|打开|播放)(?:一下)?(.+?)(?:这场|这个|的)?直播(?:间)?(?:一下|吧)?$"
+)
+_SEARCH = re.compile(
+    r"^(?:请|帮我|给我)?(?:我要|我想)?(?:搜索|搜一下|搜)(?:一下)?(.+?)(?:这个|的)?(?:视频)?(?:一下|吧)?$"
+)
+_SEARCH_LEAD = re.compile(r"^(?:搜索|搜一下|搜)")
+_QUALITY = re.compile(
+    r"^(?:请|帮我|给我)?(?:把)?(?:视频)?(?:切换|切到|换成|换到|调到|调成|设置)?(?:清晰度|画质|分辨率)?(?:到|为|成)?"
+    r"(1080\s*[Pp]|1080|720\s*[Pp]|720|一零八零|一千零八十|七二零|七百二十)"
+    r"(?:清晰度|画质)?(?:一下|吧)?$",
+    re.IGNORECASE,
+)
 _TITLE_PREFIX = re.compile(r"^(?:我要看|我想看|想看|给我放|给我看|请播放|请打开|播放|打开|看)")
 _TITLE_SUFFIX = re.compile(r"(?:这个视频|那条视频|视频)$")
 
@@ -81,6 +100,12 @@ def parse_one(segment: str) -> dict:
     softened = _soften(segment)
     if _HOME.fullmatch(softened):
         return {"intent": "home", "text": segment}
+    if _REFRESH.fullmatch(softened):
+        return {"intent": "refresh", "text": segment}
+    scroll = _SCROLL.fullmatch(softened)
+    if scroll:
+        direction = "up" if "上" in softened else "down"
+        return {"intent": "scroll", "direction": direction, "text": segment}
     if _CLOSE.fullmatch(softened):
         return {"intent": "close_video", "text": segment}
     if _BACK.fullmatch(softened):
@@ -103,6 +128,19 @@ def parse_one(segment: str) -> dict:
             return {"intent": "volume", "direction": "down", "text": segment}
         if _PLAY.fullmatch(softened):
             return {"intent": "toggle_play", "text": segment}
+    quality = _QUALITY.fullmatch(softened)
+    if quality and "右边" not in segment and "我要看" not in segment:
+        return {"intent": "quality", "level": _quality_level(quality.group(1)), "text": segment}
+    found = _SEARCH.fullmatch(softened)
+    if found and "右边" not in segment:
+        name = _clean_search(found.group(1))
+        if len(_COMPACT.sub("", name)) >= 2 and name != "视频":
+            return {"intent": "search", "query": name, "text": segment}
+    live = _LIVE_OPEN.fullmatch(softened)
+    if live and "右边" not in segment:
+        name = _EDGE.sub("", live.group(1))
+        if len(_COMPACT.sub("", name)) >= 2:
+            return {"intent": "open_live", "query": name, "text": segment}
     query = _title_query(segment)
     if not query:
         return {"intent": "unknown", "text": segment}
@@ -112,6 +150,23 @@ def parse_one(segment: str) -> dict:
         "query": query,
         "text": segment,
     }
+
+
+def _clean_search(name: str) -> str:
+    text = _EDGE.sub("", name or "")
+    while True:
+        nxt = _SEARCH_LEAD.sub("", text, count=1)
+        if nxt == text:
+            break
+        text = nxt
+    return _EDGE.sub("", _TITLE_SUFFIX.sub("", text))
+
+
+def _quality_level(token: str) -> str:
+    text = re.sub(r"\s+", "", token or "").upper()
+    if text.startswith("1080") or text in {"一零八零", "一千零八十"}:
+        return "1080"
+    return "720"
 
 
 def _title_query(segment: str) -> str:
