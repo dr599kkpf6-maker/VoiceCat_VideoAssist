@@ -21,6 +21,7 @@ INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_SCANCODE = 0x0008
 SW_RESTORE = 9
+WM_CLOSE = 0x0010
 VK = {
     "space": 0x20,
     "f": 0x46,
@@ -418,6 +419,26 @@ COLLECT_LIVE_JS = r"""
 })()
 """
 
+COLLECT_SHOW_JS = r"""
+(() => {
+  const tidy = (raw) => String(raw || "").replace(/\s+/g, " ").trim();
+  const cards = [];
+  const seen = new Set();
+  for (const node of document.querySelectorAll(".bili-bangumi-card__info--tit")) {
+    const title = tidy(node.textContent);
+    const card = node.closest(".bili-bangumi-card");
+    const image = card && (card.querySelector(".bili-bangumi-card__image") || card.querySelector(".bili-bangumi-card__cover"));
+    if (!image || title.length < 2 || seen.has(title)) continue;
+    const box = image.getBoundingClientRect();
+    if (box.width < 40 || box.height < 20) continue;
+    if (box.bottom < 0 || box.right < 0 || box.top > innerHeight || box.left > innerWidth) continue;
+    seen.add(title);
+    cards.push({title, x: box.x + box.width / 2, y: box.y + box.height / 2});
+  }
+  return cards;
+})()
+"""
+
 _CLICK_LIVE_USER = r"""
 (() => {
   const name = %s;
@@ -453,14 +474,26 @@ def _open_title(heard: str, query: str, scope: str) -> None:
     if pages is None:
         startup_checks.log(f"听到「{heard}」，打开「{query}」，调试端口不可连接")
         return
+    if scope == "cards" and not _player_in_front(pages):
+        home = _home_page(pages)
+        section = _home_section(str(home.get("href") or "") if home else "")
+        if section == "live":
+            _open_live(heard, query)
+            return
+        if section == "show":
+            _open_show(heard, query, home)
+            return
+        if section == "video" and home is not None:
+            pages = [home]
     video_pages = [
         page for page in pages
         if "/video/" in str(page.get("href") or "") or page.get("current")
     ]
     cards = []
     for page in (video_pages or pages) if scope == "right" else pages:
+        player_page = _is_player(str(page.get("href") or ""))
         for card in page["cards"]:
-            on_rail = bool(card.get("right"))
+            on_rail = bool(card.get("right")) and player_page
             if scope == "right" and not on_rail:
                 continue
             if scope == "cards" and video_pages and on_rail:
@@ -491,6 +524,91 @@ def _open_title(heard: str, query: str, scope: str) -> None:
         startup_checks.log(f"听到「{heard}」，打开「{matched['title']}」，分数 {matched['score']}，已打开")
     else:
         startup_checks.log(f"听到「{heard}」，打开「{matched['title']}」，页面上没有点到这条视频")
+
+
+def _home_section(url: str) -> str:
+    text = str(url or "")
+    if "/page/home/live" in text:
+        return "live"
+    if "/page/home/bangumi" in text or "/page/home/pgc" in text:
+        return "show"
+    if "/page/home/hots" in text or "/page/home/recommends" in text:
+        return "video"
+    return ""
+
+
+def _player_in_front(pages: list[dict]) -> bool:
+    title = _window_title(_user32.GetForegroundWindow())
+    if not title or "哔哩哔哩" in title or "直播" in title or "猫师傅" in title:
+        return False
+    player = _player_page(pages)
+    return player is not None and _player_has_video(player)
+
+
+def _open_show(heard: str, query: str, home: dict | None) -> None:
+    label = "影视" if home and "/pgc" in str(home.get("href") or "") else "番剧"
+    if home is None:
+        startup_checks.log(f"听到「{heard}」，打开「{query}」，不在{label}页面")
+        return
+    shows = _eval(home["ws"], COLLECT_SHOW_JS)
+    if not isinstance(shows, list) or not shows:
+        startup_checks.log(f"听到「{heard}」，打开「{query}」，当前页面没有已显示的{label}")
+        return
+    config = startup_checks.load_config()
+    matched = command_parser.match_title(
+        query,
+        [str(item.get("title") or "") for item in shows],
+        float(config.get("match_threshold") or 0.72),
+        float(config.get("match_margin") or 0.05),
+    )
+    if not matched["ok"]:
+        startup_checks.log(
+            f"听到「{heard}」，打开「{query}」，未打开，最接近「{matched['title']}」"
+            f"（{matched['score']}），次接近「{matched['second']}」（{matched['second_score']}）"
+        )
+        return
+    chosen = next(item for item in shows if item.get("title") == matched["title"])
+    before = {
+        str(page.get("href") or "")
+        for page in (_pages() or [])
+        if _is_player(str(page.get("href") or ""))
+    }
+    if not _click_point(home["ws"], chosen.get("x"), chosen.get("y")):
+        startup_checks.log(f"听到「{heard}」，打开「{query}」，页面上没有点到这部{label}")
+        return
+    time.sleep(0.8)
+    opened = any(
+        _is_player(str(page.get("href") or "")) and str(page.get("href") or "") not in before
+        for page in (_pages() or [])
+    )
+    if opened:
+        startup_checks.log(
+            f"听到「{heard}」，打开「{query}」，已打开{label}「{matched['title']}」，分数 {matched['score']}"
+        )
+        return
+    startup_checks.log(f"听到「{heard}」，打开「{query}」，页面上没有点到这部{label}")
+
+
+def _click_point(ws_url: str, x: float, y: float) -> bool:
+    try:
+        return bool(asyncio.run(_click_point_async(ws_url, float(x), float(y))))
+    except Exception:
+        return False
+
+
+async def _click_point_async(ws_url: str, x: float, y: float) -> bool:
+    async with websockets.connect(ws_url, open_timeout=2) as socket:
+        for index, kind in enumerate(("mouseMoved", "mousePressed", "mouseReleased"), 1):
+            await socket.send(json.dumps({
+                "id": index,
+                "method": "Input.dispatchMouseEvent",
+                "params": {"type": kind, "x": x, "y": y, "button": "left", "clickCount": 1},
+            }))
+            while True:
+                message = json.loads(await asyncio.wait_for(socket.recv(), timeout=4))
+                if message.get("id") == index:
+                    break
+    return True
 
 
 def _live_groups(follows: list, rooms: list) -> tuple[list[dict], list[dict]]:
@@ -871,15 +989,112 @@ def _close_video(heard: str) -> None:
     if pages is None:
         startup_checks.log(f"听到「{heard}」，关闭当前视频，调试端口不可连接")
         return
-    player = _player_page(pages)
-    if player is None:
+    target = _playback_page(pages)
+    if target is None:
         startup_checks.log(f"听到「{heard}」，关闭当前视频，没有正在播放的视频")
         return
-    if _eval(player["ws"], _CLICK_PLAYER_CLOSE):
+    live = _is_live_player(target.get("href") or "")
+    if live and _live_window_open() and _close_live_window() and _wait_live_window_gone():
+        _focus_client(prefer_home=True)
+        startup_checks.log(f"听到「{heard}」，关闭当前视频，已关闭")
+        return
+    clicked = bool(_eval(target["ws"], _CLICK_PLAYER_CLOSE))
+    if live and _wait_live_gone() and not _live_window_open():
+        _focus_client(prefer_home=True)
+        startup_checks.log(f"听到「{heard}」，关闭当前视频，已关闭")
+        return
+    if live:
+        reason = "没有关掉直播间" if clicked else "没有点到关闭按钮"
+        startup_checks.log(f"听到「{heard}」，关闭当前视频，{reason}")
+        return
+    if clicked:
         _focus_client(prefer_home=True)
         startup_checks.log(f"听到「{heard}」，关闭当前视频，已关闭")
         return
     startup_checks.log(f"听到「{heard}」，关闭当前视频，没有点到关闭按钮")
+
+
+def _live_window_open() -> bool:
+    return any("直播" in title and "哔哩哔哩" not in title for _hwnd, title in _client_windows())
+
+
+def _wait_live_window_gone(timeout: float = 1.6) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not _live_window_open():
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def _wait_live_gone(timeout: float = 1.6) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        pages = _pages()
+        if pages is not None and _live_page(pages) is None:
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def _client_windows() -> list[tuple[int, str]]:
+    pids = set(startup_checks._pids_named(startup_checks._process_name()))
+    found: list[tuple[int, str]] = []
+    if not pids:
+        return found
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def visit(hwnd, _lparam):
+        pid = wintypes.DWORD()
+        _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value not in pids or _user32.GetWindowTextLengthW(hwnd) <= 0:
+            return True
+        if not _user32.IsWindowVisible(hwnd) and not _user32.IsIconic(hwnd):
+            return True
+        found.append((int(hwnd), _window_title(hwnd)))
+        return True
+
+    _user32.EnumWindows(visit, 0)
+    return found
+
+
+def _close_live_window() -> bool:
+    windows = _client_windows()
+    others = [(hwnd, title) for hwnd, title in windows if title.strip() and "哔哩哔哩" not in title]
+    targets = [(hwnd, title) for hwnd, title in others if "直播" in title]
+    closed = False
+    for hwnd, _title in targets:
+        _user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+        closed = True
+    return closed
+
+
+def _live_page(pages: list[dict]) -> dict | None:
+    return next((page for page in pages if _is_live_player(page.get("href") or "")), None)
+
+
+def _is_live_player(url: str) -> bool:
+    return "live.bilibili.com/desktop" in str(url or "")
+
+
+def _player_has_video(page: dict) -> bool:
+    href = str(page.get("href") or "")
+    if page.get("current"):
+        return True
+    return "/video/" in href or "bvid=" in href.lower()
+
+
+def _foreground_is_live() -> bool:
+    title = _window_title(_user32.GetForegroundWindow())
+    return "直播" in title
+
+
+def _playback_page(pages: list[dict]) -> dict | None:
+    live = _live_page(pages)
+    player = _player_page(pages)
+    if live is not None and (player is None or not _player_has_video(player) or _foreground_is_live()):
+        return live
+    return player
 
 
 def _on_home_feed(url: str) -> bool:
@@ -1091,13 +1306,19 @@ _CLICK_TAB = r"""
 
 _CLICK_PLAYER_CLOSE = r"""
 (() => {
-  const buttons = [...document.querySelectorAll(".right-window-btns > .app_player--header-icon")];
-  const close = buttons.find((node) => {
+  const visible = (node) => {
+    const box = node.getBoundingClientRect();
+    return box.width >= 16 && box.height >= 16 && box.top >= 0 && box.top < 90;
+  };
+  const icons = [...document.querySelectorAll(".right-window-btns .app_player--header-icon, .right-window-btns .window-btn, .right-window-btns svg")];
+  const close = icons.find((node) => {
     const path = node.querySelector("path");
-    return path && String(path.getAttribute("d") || "").includes("M9.22");
+    return visible(node) && path && String(path.getAttribute("d") || "").includes("M9.22");
   });
   if (!close) return false;
-  close.click();
+  const button = close.closest(".app_player--header-icon, .window-btn") || close;
+  if (typeof button.click === "function") button.click();
+  button.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
   return true;
 })()
 """
